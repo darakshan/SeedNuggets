@@ -15,9 +15,15 @@ body{background:var(--paper);color:var(--ink);font-family:'Cormorant Garamond',G
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:.6}
 nav{display:flex;justify-content:space-between;align-items:center;padding:1.4rem 3rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:100}
 .nav-logo{font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);text-decoration:none}
-.nav-links{display:flex;gap:2rem;list-style:none}
+.nav-links{display:flex;gap:2rem;list-style:none;align-items:center}
 .nav-links a{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-decoration:none;transition:color .2s}
 .nav-links a:hover{color:var(--ink)}
+.nav-item-dropdown{position:relative}
+.nav-item-dropdown summary{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);cursor:pointer;list-style:none}
+.nav-item-dropdown summary::-webkit-details-marker{display:none}
+.nav-item-dropdown summary:hover{color:var(--ink)}
+.nav-dropdown{position:absolute;top:100%;left:0;margin:0;padding:.5rem 0;min-width:10rem;background:var(--paper);border:1px solid var(--line);box-shadow:0 .25rem 1rem rgba(0,0,0,.08);list-style:none}
+.nav-dropdown a{display:block;padding:.4rem 1rem;white-space:nowrap}
 .wrap{max-width:860px;margin:0 auto;padding:0 3rem}
 h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:300;line-height:1.1}
 h1 em,h2 em{font-style:italic;color:var(--accent)}
@@ -89,7 +95,13 @@ td a:hover{color:var(--accent)}
   <ul class="nav-links">
     <li><a href="repository.html">Repository</a></li>
     <li><a href="groups.html">By Group</a></li>
-    <li><a href="goals.html">About</a></li>
+    <li class="nav-item-dropdown">
+      <details>
+        <summary>About</summary>
+        <ul class="nav-dropdown"><li><a href="audiences.html">Audiences</a></li><li><a href="authors.html">Authors</a></li><li><a href="goals.html">Goals</a></li><li><a href="reviews.html">Reviews</a></li><li><a href="structure.html">Structure of a Seed Nugget</a></li>
+        </ul>
+      </details>
+    </li>
   </ul>
 </nav><div class="wrap"><div class="page-body fade"><h1>Seeds by group</h1>
 <p style="color:var(--dim);margin-top:.5rem;font-size:.95rem">Thematic clusters. Each seed may appear in more than one group.</p>

@@ -17,6 +17,8 @@ from pathlib import Path
 from datetime import datetime
 
 NUGGETS_DIR = Path("nuggets")
+ABOUT_DIR = Path("about")
+CONTENT_DIR = Path("content")
 SITE_DIR = Path("docs")
 
 # ── Parser ────────────────────────────────────────────────────────────────────
@@ -95,6 +97,92 @@ def nugget_by_number(nuggets, num):
             return n
     return None
 
+
+def about_body_to_html(body):
+    """Convert about-page body text (## headings, - lists, paragraphs) to HTML."""
+    out = []
+    blocks = re.split(r"\n\n+", body.strip())
+    for block in blocks:
+        lines = [L for L in block.splitlines() if L.strip()]
+        if not lines:
+            continue
+        if lines[0].startswith("## "):
+            out.append(f"<h2>{lines[0][3:].strip()}</h2>")
+            rest = "\n".join(lines[1:]).strip()
+            if rest:
+                for p in re.split(r"\n\n+", rest):
+                    if p.strip():
+                        out.append(f"<p>{p.strip().replace(chr(10), ' ')}</p>")
+        elif all(L.strip().startswith("- ") for L in lines):
+            items = [f"<li>{L.strip()[2:].replace(chr(10), ' ')}</li>" for L in lines]
+            out.append(f"<ul>\n" + "\n".join(items) + "\n</ul>")
+        else:
+            for line in lines:
+                out.append(f"<p>{line.strip().replace(chr(10), ' ')}</p>")
+    return "\n".join(out)
+
+
+def parse_about_file(filepath):
+    """Parse an about .txt file: first line = title, rest = body. Returns (title, body_html)."""
+    text = filepath.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if not lines:
+        return ("Untitled", "")
+    title = lines[0].strip()
+    body = "\n".join(lines[1:]).strip()
+    body_html = about_body_to_html(body) if body else ""
+    return (title, body_html)
+
+
+def load_about_pages():
+    """Load all about/*.txt. Returns list of (stem, title, body_html) sorted by stem."""
+    pages = []
+    for f in sorted(ABOUT_DIR.glob("*.txt")):
+        title, body_html = parse_about_file(f)
+        pages.append((f.stem, title, body_html))
+    return pages
+
+
+def load_index_copy():
+    """Load content/index.txt as key: value dict."""
+    p = CONTENT_DIR / "index.txt"
+    if not p.exists():
+        return {}
+    out = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        out[key.strip()] = value.strip()
+    return out
+
+
+def load_groups_data():
+    """Load content/groups.txt. Returns list of (title, subtitle, [num, ...])."""
+    p = CONTENT_DIR / "groups.txt"
+    if not p.exists():
+        return []
+    text = p.read_text(encoding="utf-8")
+    groups = []
+    for block in text.strip().split("\n---\n"):
+        block = block.strip()
+        if not block:
+            continue
+        title = subtitle = ""
+        seeds = []
+        for line in block.splitlines():
+            line = line.strip()
+            if line.startswith("title:"):
+                title = line[6:].strip()
+            elif line.startswith("subtitle:"):
+                subtitle = line[9:].strip()
+            elif line.startswith("seeds:"):
+                seeds = [s.strip() for s in line[6:].split(",") if s.strip()]
+        if title:
+            groups.append((title, subtitle, seeds))
+    return groups
+
 # ── HTML helpers ──────────────────────────────────────────────────────────────
 
 CSS = """
@@ -108,9 +196,15 @@ body{background:var(--paper);color:var(--ink);font-family:'Cormorant Garamond',G
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:.6}
 nav{display:flex;justify-content:space-between;align-items:center;padding:1.4rem 3rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:100}
 .nav-logo{font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);text-decoration:none}
-.nav-links{display:flex;gap:2rem;list-style:none}
+.nav-links{display:flex;gap:2rem;list-style:none;align-items:center}
 .nav-links a{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-decoration:none;transition:color .2s}
 .nav-links a:hover{color:var(--ink)}
+.nav-item-dropdown{position:relative}
+.nav-item-dropdown summary{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);cursor:pointer;list-style:none}
+.nav-item-dropdown summary::-webkit-details-marker{display:none}
+.nav-item-dropdown summary:hover{color:var(--ink)}
+.nav-dropdown{position:absolute;top:100%;left:0;margin:0;padding:.5rem 0;min-width:10rem;background:var(--paper);border:1px solid var(--line);box-shadow:0 .25rem 1rem rgba(0,0,0,.08);list-style:none}
+.nav-dropdown a{display:block;padding:.4rem 1rem;white-space:nowrap}
 .wrap{max-width:860px;margin:0 auto;padding:0 3rem}
 h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:300;line-height:1.1}
 h1 em,h2 em{font-style:italic;color:var(--accent)}
@@ -175,14 +269,24 @@ td a:hover{color:var(--accent)}
 </style>
 """
 
-def nav(active=""):
+def nav(about_pages):
+    """about_pages: list of (stem, title) for dropdown."""
+    about_items = "".join(
+        f'<li><a href="{stem}.html">{title}</a></li>' for stem, title, _ in about_pages
+    )
     return f"""
 <nav>
   <a href="index.html" class="nav-logo">Seed Nuggets</a>
   <ul class="nav-links">
     <li><a href="repository.html">Repository</a></li>
     <li><a href="groups.html">By Group</a></li>
-    <li><a href="goals.html">About</a></li>
+    <li class="nav-item-dropdown">
+      <details>
+        <summary>About</summary>
+        <ul class="nav-dropdown">{about_items}
+        </ul>
+      </details>
+    </li>
   </ul>
 </nav>"""
 
@@ -241,7 +345,7 @@ def script_to_html(text):
 
 # ── Page builders ─────────────────────────────────────────────────────────────
 
-def build_nugget(n, all_nuggets):
+def build_nugget(n, all_nuggets, about_pages):
     num = n.get("number", "?")
     title = n.get("title", "Untitled")
     subtitle = n.get("subtitle", "")
@@ -291,7 +395,7 @@ def build_nugget(n, all_nuggets):
         surface_html = before + f'<div class="cta">{cta_text}</div>'
 
     html = head(f"{num} — {title}")
-    html += nav()
+    html += nav(about_pages)
     html += f"""
 <div class="layer-tabs">
   <div class="layer-tabs-inner">
@@ -350,7 +454,7 @@ function show(id,btn){
     return html
 
 
-def build_repository(nuggets):
+def build_repository(nuggets, about_pages):
     rows = ""
     for n in nuggets:
         num = n.get("number", "")
@@ -373,7 +477,7 @@ def build_repository(nuggets):
     </tr>"""
 
     html = head("Repository")
-    html += nav()
+    html += nav(about_pages)
     html += f"""
 <div class="wrap">
   <div class="page-body fade">
@@ -400,23 +504,14 @@ def build_repository(nuggets):
     return html
 
 
-GROUPS = [
-    ("The Dissolving Map", "On frameworks and their limits", ["001", "006", "019"]),
-    ("The Nature of Events", "Whitehead's radical inversion", ["002", "003", "004", "005"]),
-    ("Fields and Physics", "Where science already arrived", ["007", "008", "009"]),
-    ("Accumulation and Emergence", "What happens when events nest", ["010", "011", "012", "013"]),
-    ("Societies of Events", "From cells to cities to AIs", ["014", "015", "016", "017"]),
-    ("How Ideas Move", "The spread and the seed", ["018", "019"]),
-]
-
-def build_groups(nuggets):
+def build_groups(nuggets, groups_data, about_pages):
     html = head("Seeds by Group")
-    html += nav()
+    html += nav(about_pages)
     html += '<div class="wrap"><div class="page-body fade">'
     html += "<h1>Seeds by group</h1>\n"
     html += '<p style="color:var(--dim);margin-top:.5rem;font-size:.95rem">Thematic clusters. Each seed may appear in more than one group.</p>\n'
 
-    for group_title, group_sub, nums in GROUPS:
+    for group_title, group_sub, nums in groups_data:
         html += f'<div class="group-block">'
         html += f'<div class="group-label">{group_title} — <span style="font-style:italic;font-weight:300">{group_sub}</span></div>'
         for num in nums:
@@ -445,7 +540,8 @@ def build_groups(nuggets):
     return html
 
 
-def build_index(nuggets):
+def build_index(nuggets, index_copy, about_pages):
+    c = index_copy
     ready = [n for n in nuggets if n.get("status") not in ("empty",)]
     total = len(nuggets)
     ready_count = len(ready)
@@ -469,47 +565,48 @@ def build_index(nuggets):
       <div class="seed-status-col">{status}</div>
     </a>"""
 
+    view_all_text = (c.get("view_all") or "View all {n} seeds →").replace("{n}", str(total))
+    about_cards = []
+    for stem, title, _ in about_pages:
+        about_cards.append(f'<a href="{stem}.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">{title}</a>')
+    about_cards.append(f'<a href="groups.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">{c.get("groups", "By Group")}</a>')
+
     html = head("Seed Nuggets")
-    html += nav()
+    html += nav(about_pages)
     html += f"""
 <div class="wrap">
   <div style="padding:5rem 0 2rem" class="fade">
-    <span class="mono small warm" style="display:block;margin-bottom:1.5rem">Working archive — not for public consumption</span>
+    <span class="mono small warm" style="display:block;margin-bottom:1.5rem">{c.get("notice", "")}</span>
     <h1>Seed<br><em>Nuggets</em></h1>
-    <p style="font-size:1.2rem;color:var(--dim);margin-top:1rem;max-width:520px;line-height:1.6">Small ideas that change how you see. Start anywhere. Follow what intrigues you.</p>
+    <p style="font-size:1.2rem;color:var(--dim);margin-top:1rem;max-width:520px;line-height:1.6">{c.get("tagline", "")}</p>
 
     <div style="display:flex;gap:3rem;margin-top:3rem;padding-top:2rem;border-top:1px solid var(--line)">
       <div>
         <div class="mono small warm">{total}</div>
-        <div style="font-size:.85rem;color:var(--dim);margin-top:.2rem">seeds defined</div>
+        <div style="font-size:.85rem;color:var(--dim);margin-top:.2rem">{c.get("stat_label_1", "seeds defined")}</div>
       </div>
       <div>
         <div class="mono small warm">{ready_count}</div>
-        <div style="font-size:.85rem;color:var(--dim);margin-top:.2rem">with content</div>
+        <div style="font-size:.85rem;color:var(--dim);margin-top:.2rem">{c.get("stat_label_2", "with content")}</div>
       </div>
     </div>
   </div>
 
   <div style="padding:2rem 0 4rem">
     <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:.8rem;margin-bottom:.5rem">
-      <span class="mono small">All seeds</span>
-      <a href="repository.html" style="font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-decoration:none">Full repository →</a>
+      <span class="mono small">{c.get("section_head", "All seeds")}</span>
+      <a href="repository.html" style="font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-decoration:none">{c.get("repo_link", "Full repository →")}</a>
     </div>
     {recent_html}
     <div style="padding:1.5rem 0">
-      <a href="repository.html" style="font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);text-decoration:none">View all {total} seeds →</a>
+      <a href="repository.html" style="font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);text-decoration:none">{view_all_text}</a>
     </div>
   </div>
 
   <div style="padding:2.5rem 0;border-top:1px solid var(--line)">
-    <div class="mono small warm" style="margin-bottom:1.2rem">About this project</div>
+    <div class="mono small warm" style="margin-bottom:1.2rem">{c.get("about_heading", "About this project")}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.8rem">
-      <a href="goals.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">Goals</a>
-      <a href="audiences.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">Audiences</a>
-      <a href="structure.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">Structure</a>
-      <a href="reviews.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">Reviews</a>
-      <a href="authors.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">Authors</a>
-      <a href="groups.html" style="color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem">By Group</a>
+      {"".join(about_cards)}
     </div>
   </div>
 </div>"""
@@ -518,119 +615,14 @@ def build_index(nuggets):
     return html
 
 
-def build_static_page(title, body_html):
+def build_static_page(title, body_html, about_pages):
     html = head(title)
-    html += nav()
+    html += nav(about_pages)
     html += f'<div class="wrap"><div class="page-body fade"><h1>{title}</h1>{body_html}</div></div>'
     html += foot()
     html += close()
     return html
 
-
-# ── Static about pages ────────────────────────────────────────────────────────
-
-GOALS_BODY = """
-<p>Seed Nuggets is an attempt to shift how people see the world — not by argument, but by offering small, memorable ideas that reorient perception. Each seed is a lens. You pick it up, look through it, and something looks different.</p>
-
-<h2>The core problem</h2>
-<p>We are living through a moment of genuine confusion. Machines talk to us, reason with us, surprise us. Ancient assumptions about mind, matter, and experience are wobbling. And most of the available explanations feel either too technical or too mystical to be any use.</p>
-<p>The dominant framework — that matter is fundamentally inert and experience is a late biological anomaly — may be the caloric of our moment. Not wrong in its observations, but wrong in its foundations. The anomalies are accumulating. The patches are getting elaborate.</p>
-
-<h2>The approach</h2>
-<p>This is not a course with a fixed sequence. It is a garden — enter anywhere, follow what intrigues you. Each seed stands alone. The connections form over time, building a network of mutually reinforcing ideas.</p>
-<p>The bridge this project aims at is between science and spirituality — not by compromising either, but by showing that careful philosophy already connects them. Alfred North Whitehead did this work almost a century ago. This project is one attempt to make it legible.</p>
-
-<h2>The ambition</h2>
-<p>To slowly adjust the way a generation sees the world. Not through a movement or an institution, but through ideas that spread because they are true and because they help people make sense of things that otherwise make no sense.</p>
-<p>The coming transformation around AI is the most immediate occasion. The stakes of getting the framework wrong are no longer abstract. This project is an investment in a more coherent and less frightened response to what is arriving.</p>
-"""
-
-AUDIENCES_BODY = """
-<p>Seed Nuggets is designed to reach several distinct audiences. The same core ideas work for all of them, but the emphasis, tone, and most useful components differ.</p>
-
-<h2>Young people (high school and college)</h2>
-<p>The primary long-term audience. Young people are more open to new frameworks before old ones calcify into obvious reality. Tone: direct, not condescending, assumes genuine intelligence. Most useful components: Surface layer, Script/video, Images. The Surface layer should be tested with actual high schoolers to calibrate difficulty.</p>
-
-<h2>Science-curious adults</h2>
-<p>Readers of Michael Pollan, Annaka Harris, Philip Goff. Already interested in consciousness, AI, philosophy of mind. Willing to read longer pieces. Tone: intellectually serious, not academic. Most useful components: all five layers, especially Depth and Provenance.</p>
-
-<h2>Spiritually oriented adults</h2>
-<p>Including Sufi communities, liberal religious groups, contemplative practitioners. Already comfortable with non-materialist views of experience, but may be suspicious of science. Tone: warm, bridging, honoring existing wisdom while showing scientific convergence. Most useful components: Surface, Depth, the connection to mystical traditions.</p>
-
-<h2>AI-concerned general public</h2>
-<p>People anxious about AI who lack a framework for thinking about it. The alien/AI seeds are the entry point. Tone: reassuring through understanding, not dismissive of concern. Most useful components: Script/video, Surface, Images.</p>
-
-<h2>Professionals and influencers</h2>
-<p>Academics, writers, thinkers who could amplify. Including: David Chalmers, Tam Hunt, Jason Silva, Michael Garfield. Tone: peer-level, rigorous, connecting to their existing work. Most useful components: Depth, Provenance, the essay (separate long-form piece).</p>
-
-<h2>Voice and style across audiences</h2>
-<p>The overall voice is: warm, precise, slightly wonder-struck, never preachy. It does not tell people what to conclude. It offers lenses and asks them to look. It honors both scientific rigor and the reality of subjective experience without privileging either. It speaks to the person who is confused and curious, not the person who already knows.</p>
-"""
-
-STRUCTURE_BODY = """
-<p>Every seed nugget has the same five layers. This consistency makes the archive navigable and the template maintainable. A reader who knows the structure can find what they need at whatever depth they want.</p>
-
-<h2>Layer 1: Surface</h2>
-<p>The accessible version. Written for a curious high schooler or a first-time encounter with the idea. Concrete language, relatable examples, no jargon. Goal: recognition — <em>oh, I've felt that, I just didn't have words for it.</em> Ends with a call to action: "try this" or "look for this." Length: 400–700 words. Test with real young readers.</p>
-
-<h2>Layer 2: Depth</h2>
-<p>The intellectual version. Connects to philosophy, science, history of ideas. Where Whitehead, Gödel, autopoiesis, and the rest live. Does not dumb down — assumes a reader who wants to go further. Can include technical detail. References other seeds by number. Length: 300–600 words.</p>
-
-<h2>Layer 3: Provenance</h2>
-<p>The roots. Glossary of key terms with definitions. Bibliography with full citations. Intellectual lineage — whose ideas these are, where they came from, what to read next. Intellectual honesty baked into the structure. Not a footnote — a genuine resource for the curious reader.</p>
-
-<h2>Layer 4: Script</h2>
-<p>The three-minute video version. Written as a shooting script with direction lines (in caps or italic) and spoken text. Designed for compression and emotional landing — the seed as a short piece of entertainment that arrives before it explains. Inspired by Jason Silva's style: rapid, evocative, philosophically serious. Ends with a single sharp question or image.</p>
-
-<h2>Layer 5: Images</h2>
-<p>The visual language. Describes (and eventually will contain) illustrations, animation concepts, shareable graphics. Each seed should have: a primary illustration, a shareable one-line graphic for social media, and a video thumbnail concept. The images should be able to stand alone and still transmit something of the seed's essence.</p>
-
-<h2>Additional fields</h2>
-<p>Each seed also carries: number (permanent identifier), short name (used in filename and URL), title, subtitle (one sentence), status (empty / partial / draft1 / final), date added, tags, and related seeds (up to five, by number). These are stored in the source .txt file and used to build the repository and navigation automatically.</p>
-"""
-
-REVIEWS_BODY = """
-<p>This page tracks intended and completed reviews of the Seed Nuggets project. Reviews are of two kinds: reviews of individual seeds, and reviews of the overall project and its goals.</p>
-
-<h2>Intended reviewers — friends and alpha participants</h2>
-<ul>
-<li>Alia Whitman — potential collaborator, strong AI interest, organizational skills</li>
-<li>Rebecca Strong</li>
-<li>Deva Temple</li>
-<li>Wendy Tremayne</li>
-<li>Ryan Lee</li>
-<li>Jim Balter</li>
-</ul>
-
-<h2>Intended reviewers — professionals</h2>
-<ul>
-<li>Michael Pollan — author, consciousness and nature</li>
-<li>Annaka Harris — author, Conscious</li>
-<li>David Chalmers — philosopher, hard problem of consciousness</li>
-<li>Jason Silva — filmmaker, ideas and wonder</li>
-<li>Michael Garfield — writer, science and culture</li>
-<li>Tam Hunt — UCSB, Mind World God (2017)</li>
-</ul>
-
-<h2>Intended reviewers — AI systems</h2>
-<p>As a meta-experiment consistent with the project's themes, reviews by AI systems are also intended. Candidate systems: Claude (Anthropic), GPT-4 (OpenAI), Gemini (Google). The question of what an AI review means is itself a seed nugget.</p>
-
-<h2>Review log</h2>
-<p style="color:var(--dim);font-style:italic">No reviews completed yet.</p>
-"""
-
-AUTHORS_BODY = """
-<p style="font-style:italic;color:var(--dim)">TBD</p>
-
-<h2>Primary author</h2>
-<p>TBD</p>
-
-<h2>Collaborators</h2>
-<p>TBD</p>
-
-<h2>A note on AI collaboration</h2>
-<p>These seeds were developed in conversation with Claude (Anthropic). The ideas, judgments, and editorial voice are human. The AI contributed drafting, reflection, and the occasional useful phrase. This collaboration is itself an instance of the themes explored in several seeds.</p>
-"""
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -650,37 +642,31 @@ def main():
     nuggets = load_all_nuggets()
     print(f"Loaded {len(nuggets)} nuggets")
 
-    # Build nugget pages
+    about_pages = load_about_pages()
+    index_copy = load_index_copy()
+    groups_data = load_groups_data()
+
     for n in nuggets:
         if filter_num and n.get("number") != filter_num:
             continue
         fname = n.get("filename", "") + ".html"
         out = SITE_DIR / fname
-        out.write_text(build_nugget(n, nuggets), encoding="utf-8")
+        out.write_text(build_nugget(n, nuggets, about_pages), encoding="utf-8")
         print(f"  Built {fname}")
 
     if not filter_num:
-        # Build generated pages
-        (SITE_DIR / "repository.html").write_text(build_repository(nuggets), encoding="utf-8")
+        (SITE_DIR / "repository.html").write_text(build_repository(nuggets, about_pages), encoding="utf-8")
         print("  Built repository.html")
 
-        (SITE_DIR / "groups.html").write_text(build_groups(nuggets), encoding="utf-8")
+        (SITE_DIR / "groups.html").write_text(build_groups(nuggets, groups_data, about_pages), encoding="utf-8")
         print("  Built groups.html")
 
-        (SITE_DIR / "index.html").write_text(build_index(nuggets), encoding="utf-8")
+        (SITE_DIR / "index.html").write_text(build_index(nuggets, index_copy, about_pages), encoding="utf-8")
         print("  Built index.html")
 
-        # Build static pages
-        static = {
-            "goals.html": ("Goals", GOALS_BODY),
-            "audiences.html": ("Audiences", AUDIENCES_BODY),
-            "structure.html": ("Structure of a Seed Nugget", STRUCTURE_BODY),
-            "reviews.html": ("Reviews", REVIEWS_BODY),
-            "authors.html": ("Authors", AUTHORS_BODY),
-        }
-        for fname, (title, body) in static.items():
-            (SITE_DIR / fname).write_text(build_static_page(title, body), encoding="utf-8")
-            print(f"  Built {fname}")
+        for stem, title, body_html in about_pages:
+            (SITE_DIR / f"{stem}.html").write_text(build_static_page(title, body_html, about_pages), encoding="utf-8")
+            print(f"  Built {stem}.html")
 
     print(f"\nDone. Site written to ./{SITE_DIR}/")
 

@@ -15,9 +15,15 @@ body{background:var(--paper);color:var(--ink);font-family:'Cormorant Garamond',G
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:.6}
 nav{display:flex;justify-content:space-between;align-items:center;padding:1.4rem 3rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:100}
 .nav-logo{font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);text-decoration:none}
-.nav-links{display:flex;gap:2rem;list-style:none}
+.nav-links{display:flex;gap:2rem;list-style:none;align-items:center}
 .nav-links a{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-decoration:none;transition:color .2s}
 .nav-links a:hover{color:var(--ink)}
+.nav-item-dropdown{position:relative}
+.nav-item-dropdown summary{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);cursor:pointer;list-style:none}
+.nav-item-dropdown summary::-webkit-details-marker{display:none}
+.nav-item-dropdown summary:hover{color:var(--ink)}
+.nav-dropdown{position:absolute;top:100%;left:0;margin:0;padding:.5rem 0;min-width:10rem;background:var(--paper);border:1px solid var(--line);box-shadow:0 .25rem 1rem rgba(0,0,0,.08);list-style:none}
+.nav-dropdown a{display:block;padding:.4rem 1rem;white-space:nowrap}
 .wrap{max-width:860px;margin:0 auto;padding:0 3rem}
 h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:300;line-height:1.1}
 h1 em,h2 em{font-style:italic;color:var(--accent)}
@@ -89,29 +95,27 @@ td a:hover{color:var(--accent)}
   <ul class="nav-links">
     <li><a href="repository.html">Repository</a></li>
     <li><a href="groups.html">By Group</a></li>
-    <li><a href="goals.html">About</a></li>
+    <li class="nav-item-dropdown">
+      <details>
+        <summary>About</summary>
+        <ul class="nav-dropdown"><li><a href="audiences.html">Audiences</a></li><li><a href="authors.html">Authors</a></li><li><a href="goals.html">Goals</a></li><li><a href="reviews.html">Reviews</a></li><li><a href="structure.html">Structure of a Seed Nugget</a></li>
+        </ul>
+      </details>
+    </li>
   </ul>
-</nav><div class="wrap"><div class="page-body fade"><h1>Structure of a Seed Nugget</h1>
-<p>Every seed nugget has the same five layers. This consistency makes the archive navigable and the template maintainable. A reader who knows the structure can find what they need at whatever depth they want.</p>
-
+</nav><div class="wrap"><div class="page-body fade"><h1>Structure of a Seed Nugget</h1><p>Every seed nugget has the same five layers. This consistency makes the archive navigable and the template maintainable. A reader who knows the structure can find what they need at whatever depth they want.</p>
 <h2>Layer 1: Surface</h2>
-<p>The accessible version. Written for a curious high schooler or a first-time encounter with the idea. Concrete language, relatable examples, no jargon. Goal: recognition — <em>oh, I've felt that, I just didn't have words for it.</em> Ends with a call to action: "try this" or "look for this." Length: 400–700 words. Test with real young readers.</p>
-
+<p>The accessible version. Written for a curious high schooler or a first-time encounter with the idea. Concrete language, relatable examples, no jargon. Goal: recognition — oh, I've felt that, I just didn't have words for it. Ends with a call to action: "try this" or "look for this." Length: 400–700 words. Test with real young readers.</p>
 <h2>Layer 2: Depth</h2>
 <p>The intellectual version. Connects to philosophy, science, history of ideas. Where Whitehead, Gödel, autopoiesis, and the rest live. Does not dumb down — assumes a reader who wants to go further. Can include technical detail. References other seeds by number. Length: 300–600 words.</p>
-
 <h2>Layer 3: Provenance</h2>
 <p>The roots. Glossary of key terms with definitions. Bibliography with full citations. Intellectual lineage — whose ideas these are, where they came from, what to read next. Intellectual honesty baked into the structure. Not a footnote — a genuine resource for the curious reader.</p>
-
 <h2>Layer 4: Script</h2>
 <p>The three-minute video version. Written as a shooting script with direction lines (in caps or italic) and spoken text. Designed for compression and emotional landing — the seed as a short piece of entertainment that arrives before it explains. Inspired by Jason Silva's style: rapid, evocative, philosophically serious. Ends with a single sharp question or image.</p>
-
 <h2>Layer 5: Images</h2>
 <p>The visual language. Describes (and eventually will contain) illustrations, animation concepts, shareable graphics. Each seed should have: a primary illustration, a shareable one-line graphic for social media, and a video thumbnail concept. The images should be able to stand alone and still transmit something of the seed's essence.</p>
-
 <h2>Additional fields</h2>
-<p>Each seed also carries: number (permanent identifier), short name (used in filename and URL), title, subtitle (one sentence), status (empty / partial / draft1 / final), date added, tags, and related seeds (up to five, by number). These are stored in the source .txt file and used to build the repository and navigation automatically.</p>
-</div></div>
+<p>Each seed also carries: number (permanent identifier), short name (used in filename and URL), title, subtitle (one sentence), status (empty / partial / draft1 / final), date added, tags, and related seeds (up to five, by number). These are stored in the source .txt file and used to build the repository and navigation automatically.</p></div></div>
 <footer>
   <span>Seed Nuggets — archive in progress</span>
   <span>Not yet for public consumption</span>

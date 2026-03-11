@@ -1,0 +1,14 @@
+notice: Working archive — not for public consumption
+tagline: Small ideas that change how you see. Start anywhere. Follow what intrigues you.
+stat_label_1: seeds defined
+stat_label_2: with content
+section_head: All seeds
+repo_link: Full repository →
+view_all: View all {n} seeds →
+about_heading: About this project
+goals: Goals
+audiences: Audiences
+structure: Structure
+reviews: Reviews
+authors: Authors
+groups: By Group
