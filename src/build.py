@@ -2,19 +2,18 @@
 """
 build.py — Seed Nuggets site generator
 Reads nugget .txt files from ./nuggets/, writes HTML to ./docs/
-Also generates repository.html from collected metadata.
+Generates: nugget pages, repository.html, tags.html (Index), groups.html,
+index.html, about pages (including map.html), site.css.
 
 Usage:
     python build.py
     python build.py --nugget 001   # rebuild single nugget
 """
 
-import os
+import re
 import shutil
 import sys
-import re
 from pathlib import Path
-from datetime import datetime
 
 NUGGETS_DIR = Path("nuggets")
 ABOUT_DIR = Path("about")
@@ -195,137 +194,6 @@ HEAD_LINKS = """
 <link rel="stylesheet" href="site.css">
 """
 
-CSS_CONTENT = """*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--ink:#1a1814;--paper:#f5f0e8;--warm:#c8a96e;--dim:#8a7f6e;--accent:#2d4a3e;--line:#e0d8c8}
-html{font-size:18px}
-body{background:var(--paper);color:var(--ink);font-family:'Cormorant Garamond',Georgia,serif;min-height:100vh}
-body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:.6}
-nav{display:flex;justify-content:space-between;align-items:center;padding:1.4rem 3rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:100}
-.nav-logo{font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);text-decoration:none}
-.nav-links{display:flex;gap:2rem;list-style:none;align-items:center}
-.nav-links a{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-decoration:none;transition:color .2s}
-.nav-links a:hover{color:var(--ink)}
-.nav-item-dropdown{position:relative}
-.nav-item-dropdown summary{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);cursor:pointer;list-style:none}
-.nav-item-dropdown summary::-webkit-details-marker{display:none}
-.nav-item-dropdown summary:hover{color:var(--ink)}
-.nav-dropdown{position:absolute;top:100%;left:0;margin:0;padding:.5rem 0;min-width:10rem;background:var(--paper);border:1px solid var(--line);box-shadow:0 .25rem 1rem rgba(0,0,0,.08);list-style:none}
-.nav-dropdown a{display:block;padding:.4rem 1rem;white-space:nowrap}
-.wrap{max-width:860px;margin:0 auto;padding:0 3rem}
-h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:300;line-height:1.1}
-h1 em,h2 em{font-style:italic;color:var(--accent)}
-h2{font-size:1.6rem;font-weight:300;margin-bottom:1rem}
-.mono{font-family:'DM Mono',monospace}
-.small{font-size:.65rem;letter-spacing:.15em;text-transform:uppercase}
-.warm{color:var(--warm)}
-.dim{color:var(--dim)}
-.prose{font-size:1.1rem;line-height:1.85;color:#2a2520}
-.prose p+p{margin-top:1.3rem}
-.prose hr{border:none;border-top:1px solid var(--line);margin:2rem 0}
-.prose em{font-style:italic}
-.tag{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);padding:.18rem .45rem;border-radius:2px;text-decoration:none;display:inline-block}
-.tag:hover{color:var(--accent);border-color:var(--accent)}
-footer{padding:3rem;border-top:1px solid var(--line);margin-top:4rem;display:flex;justify-content:space-between}
-footer span{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
-@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-.fade{animation:fadeUp .5s ease both}
-@media(max-width:640px){nav,.wrap,footer{padding-left:1.5rem;padding-right:1.5rem}.layer-tabs-inner{padding-left:1.5rem;padding-right:1.5rem}}
-/* Repo table */
-table{width:100%;border-collapse:collapse;font-size:.95rem;margin-top:1.5rem}
-th{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.15em;text-transform:uppercase;color:var(--warm);padding:.8rem 1rem .8rem 0;border-bottom:1px solid var(--line);text-align:left}
-td{padding:.9rem 1rem .9rem 0;border-bottom:1px solid var(--line);vertical-align:top}
-td a{color:var(--ink);text-decoration:none}
-td a:hover{color:var(--accent)}
-.status-draft1{color:var(--accent);font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em}
-.status-prelim{color:var(--warm);font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em}
-.status-partial{color:var(--warm);font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em}
-.status-empty{color:var(--line);font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em}
-/* Nugget page */
-.nugget-header{padding:4rem 0 2.5rem}
-.meta-row{display:flex;gap:1.2rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap}
-.premise{font-size:1.15rem;font-style:italic;color:var(--dim);border-left:2px solid var(--warm);padding-left:1.2rem;margin-top:1.2rem;line-height:1.5}
-.nugget-tags{margin-top:1.5rem}
-.layer-tabs{position:sticky;top:57px;background:var(--paper);border-bottom:1px solid var(--line);z-index:90}
-.layer-tabs-inner{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:.4rem 3rem;gap:0;row-gap:0}
-.layer-tabs-prev,.layer-tabs-next{flex-shrink:0;padding:.5rem .25rem;font-size:1rem;line-height:1}
-.layer-tabs-prev a,.layer-tabs-next a{color:var(--dim);text-decoration:none}
-.layer-tabs-prev a:hover,.layer-tabs-next a:hover{color:var(--accent)}
-.layer-tabs-center{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;flex:1;min-width:0}
-.layer-tab{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:.5rem .4rem;text-decoration:none;border-bottom:2px solid transparent;background:none;transition:all .2s;white-space:nowrap;display:inline-block}
-.layer-tab:hover{color:var(--accent)}
-.layer-tab-disabled{color:var(--line);cursor:default;pointer-events:none}
-.layer-tab-disabled:hover{color:var(--line)}
-.layer-section{scroll-margin-top:5rem;padding:3rem 0;border-top:1px solid var(--line)}
-.layer-section:first-of-type{border-top:none}
-.layer-heading{font-size:1.1rem;font-weight:400;font-family:'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--warm);margin-bottom:1.5rem}
-.map-matrix{display:inline-block;border-collapse:collapse;margin:2rem 0;font-size:.7rem}
-.map-matrix th,.map-matrix td{border:1px solid var(--line);width:1.4rem;height:1.4rem;text-align:center;vertical-align:middle}
-.map-matrix th{font-family:'DM Mono',monospace;color:var(--dim);font-weight:400}
-.map-matrix .map-cell-linked{background:var(--accent);color:var(--paper)}
-.map-matrix .map-cell-empty{background:var(--paper)}
-.map-matrix .map-row-label,.map-matrix .map-col-label{font-family:'DM Mono',monospace;color:var(--dim)}
-.cta{background:var(--accent);color:var(--paper);padding:1.4rem 1.8rem;margin-top:2rem;font-size:1rem;line-height:1.7;font-style:italic}
-.related-section{margin-top:3rem;padding-top:2rem;border-top:1px solid var(--line)}
-.related-label{margin-bottom:.5rem}
-.related-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:1rem}
-.related-card{border:1px solid var(--line);padding:1rem;text-decoration:none;color:inherit;transition:border-color .2s}
-.related-card:hover{border-color:var(--accent)}
-.related-num{font-family:'DM Mono',monospace;font-size:.58rem;color:var(--warm);margin-bottom:.3rem}
-.related-title{font-size:1rem;font-weight:300}
-.placeholder{font-style:italic}
-.script-direction{font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;color:var(--ink);margin-top:1.5rem}
-.script-punch{font-size:1.3rem;font-style:italic;color:var(--accent);margin-top:1.5rem}
-.script-line{margin-bottom:.6rem}
-/* Group page */
-.group-block{margin-bottom:3rem}
-.group-label{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--warm);padding:2rem 0 .8rem;border-top:1px solid var(--line)}
-.seed-row{display:grid;grid-template-columns:56px 1fr 80px;gap:1.2rem;padding:1.2rem 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit;align-items:baseline}
-.seed-row:hover .seed-title{color:var(--accent)}
-.seed-row.stub{opacity:.4;pointer-events:none}
-.seed-num{font-family:'DM Mono',monospace;font-size:.6rem;color:var(--warm)}
-.seed-title{font-size:1.2rem;font-weight:300;margin-bottom:.2rem}
-.seed-sub{font-size:.85rem;color:var(--dim);line-height:1.4}
-.seed-status-col{font-family:'DM Mono',monospace;font-size:.55rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);text-align:right}
-/* About pages */
-.page-body{padding:4rem 0}
-.page-body p{font-size:1.1rem;line-height:1.8;color:#2a2520;margin-bottom:1.2rem}
-.page-body h2{font-size:1.4rem;font-weight:400;color:var(--accent);margin:2.5rem 0 .8rem}
-.page-body ul{margin-left:1.5rem;margin-bottom:1.2rem}
-.page-body li{font-size:1.05rem;line-height:1.7;color:#2a2520;margin-bottom:.4rem}
-/* Index */
-.hero{padding:5rem 0 2rem}
-.hero-notice{display:block;margin-bottom:1.5rem}
-.hero-tagline{font-size:1.2rem;color:var(--dim);margin-top:1rem;max-width:520px;line-height:1.6}
-.hero-stats{display:flex;gap:3rem;margin-top:3rem;padding-top:2rem;border-top:1px solid var(--line)}
-.hero-stat-label{font-size:.85rem;color:var(--dim);margin-top:.2rem}
-.seed-list-section{padding:2rem 0 4rem}
-.section-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:.8rem;margin-bottom:.5rem}
-.link-mono-small{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-decoration:none}
-.link-mono-small:hover{color:var(--ink)}
-.seed-list-more-wrap{padding:1.5rem 0}
-.link-mono-accent{font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);text-decoration:none}
-.link-mono-accent:hover{color:var(--ink)}
-.about-block{padding:2.5rem 0;border-top:1px solid var(--line)}
-.about-block-label{margin-bottom:1.2rem}
-.about-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.8rem}
-.about-card{color:var(--ink);text-decoration:none;padding:.8rem;border:1px solid var(--line);font-size:.95rem;display:block}
-.about-card:hover{color:var(--accent);border-color:var(--accent)}
-/* Repository */
-.repo-intro{margin-top:.8rem;font-size:.95rem}
-.repo-cell-mono{font-size:.8rem}
-.repo-subtitle{font-size:.82rem;color:var(--dim)}
-.repo-date{font-size:.75rem}
-.repo-tags{font-size:.8rem;color:var(--dim)}
-/* Tags page */
-.index-section-head{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--warm);padding:2rem 0 .8rem;border-top:1px solid var(--line);margin-top:2rem}
-.tags-table th:first-child,.tags-table td:first-child{min-width:8rem}
-.tags-table .repo-tag-label{font-size:1rem;font-weight:400;font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--warm);scroll-margin-top:5rem;vertical-align:top;padding-top:.9rem}
-.tags-table .repo-tag-label-empty{vertical-align:top}
-/* Groups */
-.groups-intro{color:var(--dim);margin-top:.5rem;font-size:.95rem}
-.group-label-sub{font-style:italic;font-weight:300}
-"""
-
 def nav(about_pages):
     """about_pages: list of (stem, title) for dropdown."""
     about_items = "".join(
@@ -411,6 +279,14 @@ LAYER_ORDER = [
     ("related", "Related"),
 ]
 
+INDEX_TABLE_HEAD = """
+      <thead>
+        <tr>
+          <th>Tag</th>
+          <th>Title / Subtitle</th>
+        </tr>
+      </thead>"""
+
 
 def build_nugget(n, all_nuggets, about_pages):
     num = n.get("number", "?")
@@ -421,7 +297,6 @@ def build_nugget(n, all_nuggets, about_pages):
     tags = n.get("tags", [])
     related_nums = n.get("related", [])
     layers = n.get("layers", {})
-    shortname = n.get("shortname", "")
 
     tag_html = " ".join(f'<a href="tags.html#{tag_slug(t)}" class="tag">{t}</a>' for t in tags)
 
@@ -593,9 +468,8 @@ def build_tags_page(nuggets, about_pages):
         all_tags.update(n.get("tags", []))
     sorted_tags = sorted(all_tags)
 
-    status_order = ("draft1", "partial", "prelim", "empty")
     all_statuses = set(n.get("status", "empty") for n in nuggets)
-    sorted_statuses = sorted(all_statuses, key=lambda s: (status_order.index(s) if s in status_order else 99, s))
+    sorted_statuses = sorted(all_statuses)
 
     def row_block(label, slug, matching):
         block = ""
@@ -629,24 +503,12 @@ def build_tags_page(nuggets, about_pages):
 <div class="wrap">
   <div class="page-body fade">
     <h1>Index</h1>
-    <table class="tags-table">
-      <thead>
-        <tr>
-          <th>Tag</th>
-          <th>Title / Subtitle</th>
-        </tr>
-      </thead>
+    <table class="tags-table">{INDEX_TABLE_HEAD}
       <tbody>{tag_rows}
       </tbody>
     </table>
     <h2 class="index-section-head">Statuses</h2>
-    <table class="tags-table">
-      <thead>
-        <tr>
-          <th>Tag</th>
-          <th>Title / Subtitle</th>
-        </tr>
-      </thead>
+    <table class="tags-table">{INDEX_TABLE_HEAD}
       <tbody>{status_rows}
       </tbody>
     </table>
@@ -828,7 +690,7 @@ def main():
         print(f"  Built {fname}")
 
     if not filter_num:
-        (SITE_DIR / "site.css").write_text(CSS_CONTENT, encoding="utf-8")
+        shutil.copy(CONTENT_DIR / "site.css", SITE_DIR / "site.css")
         print("  Built site.css")
 
         (SITE_DIR / "repository.html").write_text(build_repository(nuggets, about_pages), encoding="utf-8")
