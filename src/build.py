@@ -13,7 +13,9 @@ Usage:
 import re
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 try:
     import markdown
@@ -24,6 +26,8 @@ NUGGETS_DIR = Path("nuggets")
 ABOUT_DIR = Path("about")
 CONTENT_DIR = Path("content")
 SITE_DIR = Path("docs")
+
+BUILD_TIME = None
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -217,10 +221,11 @@ def nav(about_pages):
 </nav>"""
 
 def foot():
-    return """
+    t = (BUILD_TIME or datetime.now(ZoneInfo("America/Los_Angeles"))).strftime("%Y-%m-%d %H:%M Pacific")
+    return f"""
 <footer>
   <span>Seed Nuggets — archive in progress</span>
-  <span>Not yet for public consumption</span>
+  <span>Built {t}</span>
 </footer>"""
 
 def head(title, extra=""):
@@ -673,6 +678,9 @@ def build_map_body(nuggets):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    global BUILD_TIME
+    BUILD_TIME = datetime.now(ZoneInfo("America/Los_Angeles"))
+
     filter_num = None
     if "--nugget" in sys.argv:
         idx = sys.argv.index("--nugget")
