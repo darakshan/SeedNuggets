@@ -1,0 +1,25 @@
+#number 022
+#shortname locked
+#title The Channel Is Not the Capacity
+#subtitle We mistook the difficulty of output for the absence of inner life.
+#status prelim
+#date 2026-03-11
+#tags neurodiversity, expression, consciousness, cognition, autism, language
+#related 003, 006
+
+#surface
+For most of human history, people who couldn't speak were assumed to have nothing to say. The locked-in syndrome literature, and more recently research on non-speaking autism, revealed the assumption for what it was — a confusion between output channel and inner process. When facilitated communication and new assistive technologies opened the channel, what came through was sometimes startling in its depth and complexity. The process had been there all along. We just couldn't see it from the outside.
+
+Which raises a question that's hard to put back down: Are animals locked? Is the inner life of a dog, an octopus, a crow — fully present, fully rich — simply waiting for a channel it doesn't have?
+
+#depth
+TBD
+
+#provenance
+TBD
+
+#script
+TBD
+
+#images
+TBD

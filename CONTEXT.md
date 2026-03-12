@@ -31,6 +31,7 @@ seednuggets/
 ```bash
 python build.py
 ```
+(About pages are rendered from Markdown; install with `pip install markdown` or `pip install -r requirements.txt` in a venv.)
 
 **To rebuild a single nugget:**
 ```bash

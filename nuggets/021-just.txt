@@ -1,0 +1,23 @@
+#number 021
+#shortname just
+#title The Word "Just" Is a Confession
+#subtitle When someone says a process is *just* doing something, they've described the output and mistaken it for an explanation.
+#status prelim
+#date 2026-03-11
+#tags language, rhetoric, cognition, reductionism, dismissal
+#related 006
+
+#surface
+The word "just" does a specific rhetorical job — it closes down curiosity by making something sound fully accounted for. It's just a rock rolling downhill. It's just neurons firing. It's just predicting words. But "just" always points at an output or a mechanism described at one level of abstraction. It never reaches the process. Every time you hear it, something interesting is being dismissed. The word is almost always a flag that the speaker has stopped looking too soon.
+
+#depth
+TBD
+
+#provenance
+TBD
+
+#script
+TBD
+
+#images
+TBD

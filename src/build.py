@@ -15,6 +15,11 @@ import shutil
 import sys
 from pathlib import Path
 
+try:
+    import markdown
+except ImportError:
+    markdown = None
+
 NUGGETS_DIR = Path("nuggets")
 ABOUT_DIR = Path("about")
 CONTENT_DIR = Path("content")
@@ -98,35 +103,30 @@ def nugget_by_number(nuggets, num):
 
 
 def about_body_to_html(body):
-    """Convert about-page body text (## headings, - lists, paragraphs) to HTML."""
-    out = []
-    blocks = re.split(r"\n\n+", body.strip())
-    for block in blocks:
-        lines = [L for L in block.splitlines() if L.strip()]
-        if not lines:
-            continue
-        if lines[0].startswith("## "):
-            out.append(f"<h2>{lines[0][3:].strip()}</h2>")
-            rest = "\n".join(lines[1:]).strip()
-            if rest:
-                for p in re.split(r"\n\n+", rest):
-                    t = p.strip().replace(chr(10), " ")
-                    if t:
-                        cls = " class=\"dim placeholder\"" if t in ("TBD", "No reviews completed yet.") else ""
-                        out.append(f"<p{cls}>{t}</p>")
-        elif all(L.strip().startswith("- ") for L in lines):
-            items = [f"<li>{L.strip()[2:].replace(chr(10), ' ')}</li>" for L in lines]
-            out.append(f"<ul>\n" + "\n".join(items) + "\n</ul>")
-        else:
-            for line in lines:
-                t = line.strip().replace(chr(10), " ")
-                cls = " class=\"dim placeholder\"" if t in ("TBD", "No reviews completed yet.") else ""
-                out.append(f"<p{cls}>{t}</p>")
-    return "\n".join(out)
+    """Convert about-page body from Markdown to HTML. Requires the markdown package (pip install markdown)."""
+    if not body.strip():
+        return ""
+    if markdown is None:
+        raise SystemExit(
+            "About pages use Markdown. Install the markdown package:\n"
+            "  pip install markdown\n"
+            "Or in a venv: pip install -r requirements.txt"
+        )
+    html = markdown.markdown(
+        body,
+        extensions=["fenced_code", "tables"],
+        extension_configs={"fenced_code": {}},
+    )
+    html = re.sub(
+        r'<p>(TBD|No reviews completed yet\.)</p>',
+        r'<p class="dim placeholder">\1</p>',
+        html,
+    )
+    return html
 
 
 def parse_about_file(filepath):
-    """Parse an about .txt file: first line = title, rest = body. Returns (title, body_html)."""
+    """Parse an about .md file: first line = title, rest = body (Markdown). Returns (title, body_html)."""
     text = filepath.read_text(encoding="utf-8")
     lines = text.splitlines()
     if not lines:
@@ -138,9 +138,9 @@ def parse_about_file(filepath):
 
 
 def load_about_pages():
-    """Load all about/*.txt. Returns list of (stem, title, body_html) sorted by stem."""
+    """Load all about/*.md. Returns list of (stem, title, body_html) sorted by stem."""
     pages = []
-    for f in sorted(ABOUT_DIR.glob("*.txt")):
+    for f in sorted(ABOUT_DIR.glob("*.md")):
         title, body_html = parse_about_file(f)
         pages.append((f.stem, title, body_html))
     return pages
@@ -273,10 +273,9 @@ def script_to_html(text):
 LAYER_ORDER = [
     ("surface", "Surface"),
     ("depth", "Depth"),
-    ("provenance", "Reference"),
     ("script", "Script"),
     ("images", "Images"),
-    ("related", "Related"),
+    ("references", "References"),
 ]
 
 INDEX_TABLE_HEAD = """
@@ -325,14 +324,26 @@ def build_nugget(n, all_nuggets, about_pages):
         surface_html = before + f'<div class="cta">{cta_text}</div>'
 
     def layer_has_content(layer_id):
-        if layer_id == "related":
-            return bool(rel_nuggets)
+        if layer_id == "references":
+            prov_raw = (layers.get("provenance") or "TBD").strip()
+            return prov_raw != "TBD" or bool(rel_nuggets)
         raw = (layers.get(layer_id) or "TBD").strip()
         return raw != "TBD"
 
     def layer_body(layer_id):
-        if layer_id == "related":
-            return related_cards_html
+        if layer_id == "references":
+            prov_raw = layers.get("provenance", "TBD")
+            prov_html = text_to_html(prov_raw) if (prov_raw or "TBD").strip() != "TBD" else ""
+            parts = []
+            if prov_html:
+                parts.append(f'<div class="prose">{prov_html}</div>')
+            if rel_nuggets:
+                parts.append('<div class="related-section">')
+                if prov_html:
+                    parts.append('<h3 class="layer-heading related-label">Related seeds</h3>')
+                parts.append(related_cards_html)
+                parts.append("</div>")
+            return "\n    ".join(parts)
         if layer_id == "surface":
             return surface_html
         raw = layers.get(layer_id, "TBD")
@@ -352,7 +363,7 @@ def build_nugget(n, all_nuggets, about_pages):
         if not layer_has_content(layer_id):
             continue
         body = layer_body(layer_id)
-        if layer_id == "related":
+        if layer_id == "references":
             section_content = f'<h2 class="layer-heading">{label}</h2>\n    {body}'
         else:
             section_content = f'<h2 class="layer-heading">{label}</h2>\n    <div class="prose">{body}</div>'
@@ -592,8 +603,9 @@ def build_index(nuggets, index_copy, about_pages):
 <div class="wrap">
   <div class="hero fade">
     <span class="mono small warm hero-notice">{c.get("notice", "")}</span>
-    <h1>Seed<br><em>Nuggets</em></h1>
+    <h1>Seed Nuggets</h1>
     <p class="hero-tagline">{c.get("tagline", "")}</p>
+    <p class="hero-purpose">{c.get("purpose", "")}</p>
 
     <div class="hero-stats">
       <div>
