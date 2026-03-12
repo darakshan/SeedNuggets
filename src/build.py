@@ -243,16 +243,62 @@ def head(title, extra=""):
 def close():
     return "\n</body>\n</html>"
 
+def _block_to_html(block):
+    """Convert a single block (paragraph or list) to HTML."""
+    lines = [ln.strip() for ln in block.strip().splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    list_markers = ("- ", "* ")
+    if any(ln.startswith(list_markers) for ln in lines):
+        items = []
+        for ln in lines:
+            for m in list_markers:
+                if ln.startswith(m):
+                    items.append(f"<li>{ln[len(m):].strip()}</li>")
+                    break
+            else:
+                items.append(f"<li>{ln}</li>")
+        return f"<ul>\n" + "\n".join(items) + "\n</ul>"
+    return f"<p>{' '.join(lines)}</p>"
+
 def text_to_html(text):
-    """Convert plain text with --- dividers and paragraphs to HTML."""
+    """Convert plain text with --- dividers, paragraphs, and - / * lists to HTML."""
     if text.strip() == "TBD":
         return '<p class="dim placeholder">This layer is not yet written.</p>'
     parts = text.split("\n---\n")
     html_parts = []
+    list_markers = ("- ", "* ")
     for part in parts:
-        paras = [p.strip() for p in part.strip().split("\n\n") if p.strip()]
-        html = "\n".join(f"<p>{p.replace(chr(10), ' ')}</p>" for p in paras)
-        html_parts.append(html)
+        blocks = []
+        current = []
+        in_list = None
+        for line in part.splitlines():
+            is_list_line = any(line.strip().startswith(m) for m in list_markers)
+            if is_list_line:
+                if in_list is False and current:
+                    blocks.append("\n".join(current))
+                    current = []
+                in_list = True
+                current.append(line)
+            else:
+                if in_list is True and current:
+                    blocks.append(("\n".join(current), "list"))
+                    current = []
+                in_list = False
+                current.append(line)
+        if current:
+            if in_list:
+                blocks.append(("\n".join(current), "list"))
+            else:
+                blocks.append("\n".join(current))
+        part_html = []
+        for b in blocks:
+            if isinstance(b, tuple):
+                part_html.append(_block_to_html(b[0]))
+            else:
+                for para in (p.strip() for p in b.split("\n\n") if p.strip()):
+                    part_html.append(_block_to_html(para))
+        html_parts.append("\n".join(part_html))
     return "<hr>".join(html_parts)
 
 def script_to_html(text):
