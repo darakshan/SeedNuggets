@@ -33,6 +33,11 @@ The build script parses nugget files strictly. Follow this grammar so new or rev
 - **Only inside `#provenance`.** Each line: `#ref` followed by a space and the full citation text (e.g. author, title, year, notes). One reference per line. If `#ref` appears in any other section it is an error (the build warns and ignores it).
 - The build does two things with `#ref` lines: (1) At the end of the References layer on each nugget page it generates a **Further reading** subsection listing all refs from that nugget. (2) It collects refs from **all** nuggets and generates the Bibliography page, sorted by exact ref text (so author order if you cite as "Author, Title..."), with which nuggets cite each.
 
+####Key terms (#term)
+
+- **Only inside `#provenance`.** Each line: `#term` followed by a space and the term, then an em dash (`—`), then the definition (e.g. `#term Paradigm — Thomas Kuhn's term for the framework...`). One term per line. If `#term` appears in any other section it is an error (the build warns and ignores it).
+- The build collects terms from **all** nuggets and generates the Glossary page: terms sorted alphabetically, grouped so the same term from multiple nuggets appears once with each definition indented; each entry lists which nuggets define it (In: …).
+
 ####Layers (multi-line sections)
 
 - Section start: a line that is exactly `#surface`, `#depth`, `#provenance`, `#script`, or `#images` (no text after the name). Parser treats these as layer names, not metadata.

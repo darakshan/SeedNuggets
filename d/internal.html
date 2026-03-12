@@ -49,6 +49,7 @@
 <li>tags, and </li>
 <li>related seeds (up to five, by number), and</li>
 <li>references (#ref): optional lines inside <strong>#provenance</strong> only; each line is full citation text. The build generates a “Further reading” subsection on the nugget page and a shared Bibliography page (sorted by ref text).</li>
+<li>key terms (#term): optional lines inside <strong>#provenance</strong> only; each line is <code>#term Term — Definition</code>. The build generates the shared Glossary page (terms grouped, definitions indented; lists which nuggets define each).</li>
 </ul>
 <p>These are stored in the source .txt file and used to build the repository, navigation, and bibliography automatically. See the grammar file for details on how all of these are represented.</p>
 <h2>Nugget file grammar</h2>
@@ -83,6 +84,11 @@
 <ul>
 <li><strong>Only inside <code>#provenance</code>.</strong> Each line: <code>#ref</code> followed by a space and the full citation text (e.g. author, title, year, notes). One reference per line. If <code>#ref</code> appears in any other section it is an error (the build warns and ignores it).</li>
 <li>The build does two things with <code>#ref</code> lines: (1) At the end of the References layer on each nugget page it generates a <strong>Further reading</strong> subsection listing all refs from that nugget. (2) It collects refs from <strong>all</strong> nuggets and generates the Bibliography page, sorted by exact ref text (so author order if you cite as "Author, Title..."), with which nuggets cite each.</li>
+</ul>
+<h4>Key terms (#term)</h4>
+<ul>
+<li><strong>Only inside <code>#provenance</code>.</strong> Each line: <code>#term</code> followed by a space and the term, then an em dash (<code>—</code>), then the definition (e.g. <code>#term Paradigm — Thomas Kuhn's term for the framework...</code>). One term per line. If <code>#term</code> appears in any other section it is an error (the build warns and ignores it).</li>
+<li>The build collects terms from <strong>all</strong> nuggets and generates the Glossary page: terms sorted alphabetically, grouped so the same term from multiple nuggets appears once with each definition indented; each entry lists which nuggets define it (In: …).</li>
 </ul>
 <h4>Layers (multi-line sections)</h4>
 <ul>
@@ -391,7 +397,7 @@ Show the inside by controlling what the audience sees and hears from the outside
 <li>Alia Whitman (friend) has independently suggested collaboration — she has organizational skills and AI interest that could complement the intellectual work here.</li>
 <li>The project could grow into a foundation or movement but the primary author does not have energy to hold that — the goal is to develop the intellectual DNA clearly enough that others can carry it.</li>
 </ul>
-<p>Last built: 2026-03-12 13:20 Pacific</p></div></div>
+<p>Last built: 2026-03-12 13:45 Pacific</p></div></div>
 <footer>
   <span>Seed Nuggets</span>
 </footer>

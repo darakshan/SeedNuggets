@@ -52,6 +52,16 @@ td a:hover{color:var(--accent)}
 .bib-in{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:var(--dim);margin-right:.35rem}
 .bib-entry a{color:var(--accent);text-decoration:none}
 .bib-entry a:hover{text-decoration:underline}
+/* Glossary */
+.gloss-entry{margin-bottom:2rem;font-size:.95rem}
+.gloss-term-line{margin-bottom:.35rem}
+.gloss-term{font-weight:600;color:var(--ink)}
+.gloss-defs{margin-left:1.5rem}
+.gloss-def-block{margin-bottom:.8rem;line-height:1.6}
+.gloss-def-block:last-child{margin-bottom:0}
+.gloss-in{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:var(--dim);margin-right:.35rem}
+.gloss-def-block a{color:var(--accent);text-decoration:none}
+.gloss-def-block a:hover{text-decoration:underline}
 /* Further reading (nugget page) */
 .ref-heading{margin-top:1.5rem}
 .ref-list{margin-top:1rem}

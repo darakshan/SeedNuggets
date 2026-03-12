@@ -6,6 +6,7 @@
 - [Map](map.html) — related-seeds matrix
 - [Source nuggets](../nuggets/) — raw nugget files in the repo
 - [Bibliography](bibliography.html) — references from nuggets
+- [Glossary](glossary.html) — key terms from nuggets
 
 ---
 

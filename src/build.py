@@ -48,6 +48,7 @@ def parse_nugget(filepath):
     meta = {}
     layers = {}
     refs = []
+    terms = []
     current_layer = None
     buffer = []
 
@@ -73,6 +74,17 @@ def parse_nugget(filepath):
                     refs.append(value.strip())
                 else:
                     _warn(f"Warning: {filepath}: #ref only allowed in #provenance (found in or before {current_layer or 'metadata'})")
+                continue
+            if key == "term":
+                if current_layer == "provenance":
+                    raw = value.strip()
+                    if " — " in raw:
+                        term_part, def_part = raw.split(" — ", 1)
+                        terms.append((term_part.strip(), def_part.strip()))
+                    else:
+                        terms.append((raw, ""))
+                else:
+                    _warn(f"Warning: {filepath}: #term only allowed in #provenance (found in or before {current_layer or 'metadata'})")
                 continue
             elif key in SINGLE_LINE:
                 flush()
@@ -112,6 +124,7 @@ def parse_nugget(filepath):
                 related_parsed.append(m.group(1))
     meta["related"] = related_parsed
     meta["refs"] = refs
+    meta["terms"] = terms
 
     meta["layers"] = {
         "surface": layers.get("surface", "TBD"),
@@ -901,6 +914,55 @@ def build_bibliography_page(nuggets):
     return html
 
 
+def build_glossary_page(nuggets):
+    """Build Glossary from #term (Term — Definition) in #provenance of all nuggets. Grouped by term; term in bold, definitions indented."""
+    by_entry = {}
+    for n in nuggets:
+        num = n.get("number", "")
+        fname = n.get("filename", "") + ".html"
+        title_display = display_number(num)
+        for term, definition in n.get("terms", []):
+            entry_key = (term, definition)
+            if entry_key not in by_entry:
+                by_entry[entry_key] = []
+            by_entry[entry_key].append((title_display, fname))
+    by_term = {}
+    for (term, definition), nugget_list in by_entry.items():
+        if term not in by_term:
+            by_term[term] = []
+        sorted_nugs = sorted(nugget_list, key=lambda x: (int(x[0]) if x[0].isdigit() else 999, x[0]))
+        by_term[term].append((definition, sorted_nugs))
+    parts = []
+    for term in sorted(by_term.keys(), key=lambda t: t.lower()):
+        term_esc = _html.escape(term)
+        def_blocks = []
+        for definition, nugget_list in by_term[term]:
+            nugget_links = " ".join(f'<a href="{fname}">{disp}</a>' for disp, fname in nugget_list)
+            def_esc = _html.escape(definition)
+            if definition:
+                def_blocks.append(
+                    f'<div class="gloss-def-block"><span class="gloss-def">{def_esc}</span> '
+                    f'<span class="gloss-in">In:</span> {nugget_links}</div>'
+                )
+            else:
+                def_blocks.append(
+                    f'<div class="gloss-def-block"><span class="gloss-in">In:</span> {nugget_links}</div>'
+                )
+        parts.append(
+            f'<div class="gloss-entry">'
+            f'<div class="gloss-term-line"><strong class="gloss-term">{term_esc}</strong></div>'
+            f'<div class="gloss-defs">' + "\n".join(def_blocks) + '</div>'
+            f'</div>'
+        )
+    body = "\n".join(parts) if parts else "<p class=\"dim\">No terms yet. Add <code>#term Term — Definition</code> lines inside <code>#provenance</code> in any nugget.</p>"
+    html = head("Glossary")
+    html += nav(from_d=True)
+    html += f'<div class="wrap"><div class="page-body fade"><h1>Glossary</h1><p class="dim repo-intro">Key terms from all nuggets.</p>{body}</div></div>'
+    html += foot()
+    html += close()
+    return html
+
+
 def build_map_body(nuggets):
     """HTML body for the Map about page: N×N matrix of related links (from → to)."""
     sorted_nuggets = sorted(nuggets, key=lambda x: x.get("number", ""))
@@ -918,6 +980,27 @@ def build_map_body(nuggets):
         rows.append("<tr>" + "".join(cells) + "</tr>")
     table = "<table class=\"map-matrix\">\n" + "\n".join(rows) + "\n</table>"
     return f'<p>Rows = from seed, columns = to seed. Marked cell means the row seed links to the column seed in its Related list.</p>\n{table}'
+
+
+def build_nuggets_index():
+    """Write nuggets/index.html so that ../nuggets/ resolves on static hosts (e.g. GitHub Pages) that require an index."""
+    txt_files = sorted(NUGGETS_DIR.glob("*.txt"))
+    lines = [
+        "<!DOCTYPE html>",
+        "<html lang=\"en\">",
+        "<head><meta charset=\"utf-8\"><title>Source nuggets</title></head>",
+        "<body>",
+        "<h1>Source nuggets</h1>",
+        "<p>Raw nugget files. See the <a href=\"../d/\">site</a> for the built pages.</p>",
+        "<ul>",
+    ]
+    for p in txt_files:
+        name = p.name
+        lines.append(f'  <li><a href="{_html.escape(name)}">{_html.escape(name)}</a></li>')
+    lines.append("</ul>")
+    lines.append("</body>")
+    lines.append("</html>")
+    (NUGGETS_DIR / "index.html").write_text("\n".join(lines), encoding="utf-8")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -993,11 +1076,17 @@ def main():
         (SITE_DIR / "bibliography.html").write_text(build_bibliography_page(nuggets), encoding="utf-8")
         print("  Built bibliography.html")
 
+        (SITE_DIR / "glossary.html").write_text(build_glossary_page(nuggets), encoding="utf-8")
+        print("  Built glossary.html")
+
         (_ROOT / "index.html").write_text(build_index(nuggets, index_copy, status_order), encoding="utf-8")
         print("  Built index.html")
 
         (SITE_DIR / "map.html").write_text(build_static_page("Map", build_map_body(nuggets)), encoding="utf-8")
         print("  Built map.html")
+
+        build_nuggets_index()
+        print("  Built nuggets/index.html")
 
     print(f"\nDone. Site written to repo root (index.html) and {SITE_DIR.relative_to(_ROOT)}/ (docs)")
     if _warn_count:
