@@ -28,6 +28,11 @@ The build script parses nugget files strictly. Follow this grammar so new or rev
   - `#tags` — comma-separated list. Each tag: lowercase, multi-word tags hyphenated (e.g. history-of-science, AI). No spaces after commas required but allowed.
   - `#related` — comma-separated list of other nugget numbers. Use the same string as each target nugget’s `#number` (e.g. 002, 011, 018). Max 5. Links resolve by string equality, so "1" will not match a nugget whose `#number` is "001".
 
+####References (#ref)
+
+- **Only inside `#provenance`.** Each line: `#ref` followed by a space and the full citation text (e.g. author, title, year, notes). One reference per line. If `#ref` appears in any other section it is an error (the build warns and ignores it).
+- The build does two things with `#ref` lines: (1) At the end of the References layer on each nugget page it generates a **Further reading** subsection listing all refs from that nugget. (2) It collects refs from **all** nuggets and generates the Bibliography page, sorted by exact ref text (so author order if you cite as "Author, Title..."), with which nuggets cite each.
+
 ####Layers (multi-line sections)
 
 - Section start: a line that is exactly `#surface`, `#depth`, `#provenance`, `#script`, or `#images` (no text after the name). Parser treats these as layer names, not metadata.

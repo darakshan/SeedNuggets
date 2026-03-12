@@ -48,11 +48,9 @@ Intuition pump — Dennett's term for a device that makes a conclusion feel obvi
 
 Fallacy of misplaced concreteness — Whitehead's term for mistaking a useful abstraction for the full concrete reality it was extracted from. Process and Reality (1929).
 
-Further reading:
-
-- Ryle, G. The Concept of Mind (1949)
-- Whitehead, A.N. Process and Reality (1929)
-- Dennett, D. Intuition Pumps and Other Tools for Thinking (2013)
+#ref Ryle, G. The Concept of Mind (1949).
+#ref Whitehead, A.N. Process and Reality (1929).
+#ref Dennett, D. Intuition Pumps and Other Tools for Thinking (2013).
 
 #script
 [A casual food place. Two YOUNG MEN at a table. Trays, drinks, the usual noise.]

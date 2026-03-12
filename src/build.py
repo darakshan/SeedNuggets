@@ -47,6 +47,7 @@ def parse_nugget(filepath):
 
     meta = {}
     layers = {}
+    refs = []
     current_layer = None
     buffer = []
 
@@ -67,7 +68,13 @@ def parse_nugget(filepath):
             key = parts[0].lower()
             value = parts[1] if len(parts) > 1 else ""
 
-            if key in SINGLE_LINE:
+            if key == "ref":
+                if current_layer == "provenance":
+                    refs.append(value.strip())
+                else:
+                    _warn(f"Warning: {filepath}: #ref only allowed in #provenance (found in or before {current_layer or 'metadata'})")
+                continue
+            elif key in SINGLE_LINE:
                 flush()
                 current_layer = None
                 if key in meta:
@@ -104,6 +111,7 @@ def parse_nugget(filepath):
             if m:
                 related_parsed.append(m.group(1))
     meta["related"] = related_parsed
+    meta["refs"] = refs
 
     meta["layers"] = {
         "surface": layers.get("surface", "TBD"),
@@ -451,7 +459,7 @@ def build_nugget(n, all_nuggets):
     def layer_has_content(layer_id):
         if layer_id == "references":
             prov_raw = (layers.get("provenance") or "TBD").strip()
-            return prov_raw != "TBD" or bool(rel_nuggets)
+            return prov_raw != "TBD" or bool(rel_nuggets) or bool(n.get("refs"))
         raw = (layers.get(layer_id) or "TBD").strip()
         return raw != "TBD"
 
@@ -462,9 +470,17 @@ def build_nugget(n, all_nuggets):
             parts = []
             if prov_html:
                 parts.append(f'<div class="prose">{prov_html}</div>')
+            refs_list = n.get("refs", [])
+            if refs_list:
+                parts.append('<h3 class="layer-heading">Further reading</h3>')
+                parts.append('<div class="prose ref-list">')
+                for ref_text in refs_list:
+                    if ref_text:
+                        parts.append(f'<p class="ref-entry">{_html.escape(ref_text)}</p>')
+                parts.append("</div>")
             if rel_nuggets:
                 parts.append('<div class="related-section">')
-                if prov_html:
+                if prov_html or refs_list:
                     parts.append('<h3 class="layer-heading related-label">Related seeds</h3>')
                 parts.append(related_cards_html)
                 parts.append("</div>")
@@ -834,7 +850,7 @@ def build_about_page():
     body_html = about_body_to_html(raw) if raw.strip() else ""
     html = head("About")
     html += nav(from_d=True)
-    html += f'<div class="wrap"><div class="page-body fade"><h1>About</h1>{body_html}</div></div>'
+    html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
     html += foot()
     html += close()
     return html
@@ -846,7 +862,40 @@ def build_internal_page():
     body_html = about_body_to_html(raw) if raw.strip() else ""
     html = head("Internal")
     html += nav(from_d=True)
-    html += f'<div class="wrap"><div class="page-body fade"><h1>Internal</h1>{body_html}</div></div>'
+    html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
+    html += foot()
+    html += close()
+    return html
+
+
+def build_bibliography_page(nuggets):
+    """Build Bibliography from #ref (full text) in #provenance of all nuggets. Sorted by exact ref text; lists which nuggets cite each."""
+    by_text = {}
+    for n in nuggets:
+        num = n.get("number", "")
+        fname = n.get("filename", "") + ".html"
+        title_display = display_number(num)
+        for ref_text in n.get("refs", []):
+            ref_text = (ref_text or "").strip()
+            if not ref_text:
+                continue
+            if ref_text not in by_text:
+                by_text[ref_text] = []
+            by_text[ref_text].append((title_display, fname))
+    entries = sorted(by_text.items(), key=lambda x: x[0].lower())
+    parts = []
+    for ref_text, nugget_list in entries:
+        sorted_nugs = sorted(nugget_list, key=lambda x: (int(x[0]) if x[0].isdigit() else 999, x[0]))
+        nugget_links = " ".join(f'<a href="{fname}">{disp}</a>' for disp, fname in sorted_nugs)
+        ref_esc = _html.escape(ref_text)
+        parts.append(
+            f'<div class="bib-entry"><span class="bib-text">{ref_esc}</span> '
+            f'<span class="bib-in">In:</span> {nugget_links}</div>'
+        )
+    body = "\n".join(parts) if parts else "<p class=\"dim\">No references yet. Add <code>#ref</code> lines (full citation text) inside <code>#provenance</code> in any nugget.</p>"
+    html = head("Bibliography")
+    html += nav(from_d=True)
+    html += f'<div class="wrap"><div class="page-body fade"><h1>Bibliography</h1><p class="dim repo-intro">References from all nuggets.</p>{body}</div></div>'
     html += foot()
     html += close()
     return html
@@ -940,6 +989,9 @@ def main():
 
         (SITE_DIR / "internal.html").write_text(build_internal_page(), encoding="utf-8")
         print("  Built internal.html")
+
+        (SITE_DIR / "bibliography.html").write_text(build_bibliography_page(nuggets), encoding="utf-8")
+        print("  Built bibliography.html")
 
         (_ROOT / "index.html").write_text(build_index(nuggets, index_copy, status_order), encoding="utf-8")
         print("  Built index.html")

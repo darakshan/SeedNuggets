@@ -46,6 +46,15 @@ td a:hover{color:var(--accent)}
 .status-prelim{color:var(--warm);font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em}
 .status-partial{color:var(--warm);font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em}
 .status-empty{color:var(--line);font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em}
+/* Bibliography */
+.bib-entry{margin-bottom:1rem;font-size:.95rem}
+.bib-text{font-style:italic}
+.bib-in{font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.08em;color:var(--dim);margin-right:.35rem}
+.bib-entry a{color:var(--accent);text-decoration:none}
+.bib-entry a:hover{text-decoration:underline}
+/* Further reading (nugget page) */
+.ref-list{margin-top:1rem}
+.ref-entry{margin-bottom:.6rem;font-size:.95rem}
 /* Nugget page */
 .nugget-header{padding:4rem 0 2.5rem}
 .meta-row{display:flex;gap:1.2rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap}

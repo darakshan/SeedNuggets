@@ -32,7 +32,7 @@ Each seed also carries:
 - status (empty / partial / draft1 / final)
 - date added
 - tags, and 
-- related seeds (up to five, by number). 
+- related seeds (up to five, by number), and
+- references (#ref): optional lines inside **#provenance** only; each line is full citation text. The build generates a “Further reading” subsection on the nugget page and a shared Bibliography page (sorted by ref text).
 
-These are stored in the source .txt file and used to build the repository and navigation automatically.
-See the grammar file for details on how all of these are represented.
+These are stored in the source .txt file and used to build the repository, navigation, and bibliography automatically. See the grammar file for details on how all of these are represented.

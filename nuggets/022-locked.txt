@@ -76,19 +76,12 @@ Category mistake — Ryle's term for applying a description from one category as
 
 Facilitated communication (FC) — a technique in which a facilitator supports a nonspeaking person's hand or arm while they type or point to letters. Widely used with nonspeaking autistic individuals. Scientifically contested: controlled studies have repeatedly shown that in many cases the facilitator, not the person, is the source of the communication — often unconsciously. The controversy does not settle the question of what nonspeaking individuals understand or experience; it only complicates the question of how to reliably access it.
 
-Bibliography:
-
-Bauby, J-D. The Diving Bell and the Butterfly. Knopf, 1997. The primary text. Essential.
-
-Laureys, S. et al. "Unresponsive wakefulness syndrome: a new name for the vegetative state or apallic syndrome." BMC Medicine, 2010. The study that brought the Houben case to public attention and argued for widespread misdiagnosis.
-
-Ryle, G. The Concept of Mind. Hutchinson, 1949. Source of the category mistake. See also nugget #21.
-
-Dickens, K. The Telepathy Tapes. Podcast, Season 1, 2024. Flawed in its more extraordinary claims but important as a cultural document of the reckoning around nonspeaking autism and presumed competence.
-
-Vyse, S. "The Telepathy Tapes: A Skeptical Analysis." Skeptical Inquirer, 2025. The primary scientific critique.
-
-Schnabel, J. (dir.) The Diving Bell and the Butterfly. Film, 2007. The visual realization of Bauby's memoir. Useful for the script layer.
+#ref Bauby, J-D. The Diving Bell and the Butterfly. Knopf, 1997. The primary text. Essential.
+#ref Laureys, S. et al. Unresponsive wakefulness syndrome: a new name for the vegetative state or apallic syndrome. BMC Medicine, 2010.
+#ref Ryle, G. The Concept of Mind. Hutchinson, 1949. Source of the category mistake.
+#ref Dickens, K. The Telepathy Tapes. Podcast, Season 1, 2024.
+#ref Vyse, S. The Telepathy Tapes: A Skeptical Analysis. Skeptical Inquirer, 2025.
+#ref Schnabel, J. (dir.) The Diving Bell and the Butterfly. Film, 2007.
 
 #script
 TITLE CARD: 1983.
