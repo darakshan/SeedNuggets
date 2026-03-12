@@ -1,3 +1,5 @@
+# Internal Documentation
+
 The following information is provide to help when creating new nuggets.
 
 Beware, this website cached by github (or your AI?) and what you see may be out of date.  Check with Darakshan for the next valid nugget number.
@@ -20,3 +22,5 @@ Here is an essay was written just before this website was built:
 --- 
 
 @include context.md
+
+Last built: @timestamp

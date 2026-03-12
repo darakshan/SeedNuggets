@@ -299,11 +299,9 @@ def nav(from_d=False):
 </nav>"""
 
 def foot():
-    t = (BUILD_TIME or datetime.now(ZoneInfo("America/Los_Angeles"))).strftime("%Y-%m-%d %H:%M Pacific")
-    return f"""
+    return """
 <footer>
-  <span>Seed Nuggets — archive in progress</span>
-  <span>Built {t}</span>
+  <span>Seed Nuggets</span>
 </footer>"""
 
 def head(title, extra="", at_root=False):
@@ -472,7 +470,7 @@ def build_nugget(n, all_nuggets):
                 parts.append(f'<div class="prose">{prov_html}</div>')
             refs_list = n.get("refs", [])
             if refs_list:
-                parts.append('<h3 class="layer-heading">Further reading</h3>')
+                parts.append('<h3 class="layer-heading ref-heading">Further reading</h3>')
                 parts.append('<div class="prose ref-list">')
                 for ref_text in refs_list:
                     if ref_text:
@@ -857,9 +855,11 @@ def build_about_page():
 
 
 def build_internal_page():
-    """Build Internal page from internal/page.md (with @include)."""
+    """Build Internal page from internal/page.md (with @include). Expands @timestamp to build time."""
     raw = load_internal_page_content()
     body_html = about_body_to_html(raw) if raw.strip() else ""
+    t = (BUILD_TIME or datetime.now(ZoneInfo("America/Los_Angeles"))).strftime("%Y-%m-%d %H:%M Pacific")
+    body_html = body_html.replace("@timestamp", t)
     html = head("Internal")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
