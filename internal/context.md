@@ -1,4 +1,13 @@
 # CONTEXT.md — Seed Nuggets Project
+
+TODO: This document is a few days old.  Some sections can be removed because the info can be found elsewhere.
+
+New thoughts to integrate:
+- beware, website is cached by github or your AI and what you see may be out of date
+- track latest nugged number internally, you may add some and need to number them sequentially 
+  before they are integrated into the source files
+
+
 ## Briefing for a new AI working session
 
 This document gives a new AI assistant (in Cursor or elsewhere) the full context needed to continue this project without losing the thinking behind it.

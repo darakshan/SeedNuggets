@@ -1,0 +1,23 @@
+#number 025
+#shortname usedtothink
+#title We Used to Think. Now We Know.
+#subtitle The phrase that flatters the present and buries the past — and will be used against us.
+#status empty
+#date 2026-03-12
+#tags history-of-science, epistemology, paradigm-shift, rhetoric, humility, language
+#related 001, 019, 021, 024
+
+#surface
+TBD
+
+#depth
+TBD — "We used to think X, now we know Y" is one of the most common moves in popular science writing and documentary narration. It feels like progress. It feels like honesty — look how far we've come. But it does two things simultaneously that are both questionable. First, it caricatures the past: the people who believed X were not stupid or naive, they were working with the best available framework and it served them well. Caloric theory was not a mistake — it was a triumph, until it wasn't. Second, it smuggles the present in as arrival rather than waypoint. "Now we know" implies we have landed somewhere solid. We haven't. We are always inside a framework that will one day be described by someone else as "they used to think." The phrase is a rhetorical move masquerading as epistemological progress. It closes questions that should stay open. See nugget #1 for the caloric pattern. See nugget #19 for how maps get replaced. See nugget #21 for how single words perform large philosophical work quietly.
+
+#provenance
+TBD
+
+#script
+TBD
+
+#images
+TBD
