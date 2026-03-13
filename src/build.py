@@ -21,18 +21,13 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-try:
-    import markdown
-except ImportError:
-    markdown = None
-
 _ROOT = Path(__file__).resolve().parent.parent
 from nugget_parser import NUGGETS_DIR, load_all_nuggets, nugget_by_number, expand_nugget_directives
+from md_pages import process_md_to_html
 
 ABOUT_DIR = _ROOT / "about"
 INTERNAL_DIR = _ROOT / "internal"
 CONTENT_DIR = _ROOT / "content"
-NOTES_DIR = _ROOT / "notes"
 EXPLAINERS_CSV = CONTENT_DIR / "explainers.csv"
 SITE_DIR = _ROOT / "d"
 
@@ -65,7 +60,7 @@ def get_build_input_files():
     files = set()
     for p in NUGGETS_DIR.glob("*.txt"):
         files.add(p)
-    for name in ["index.txt", "home.md", "status.txt", "resources.md", "site.css"]:
+    for name in ["index.txt", "home.md", "status.txt", "resources.md", "site.css", "logo.svg"]:
         p = CONTENT_DIR / name
         if p.exists():
             files.add(p)
@@ -102,27 +97,6 @@ def load_index_copy():
     return out
 
 
-def _expand_includes(text, base_dir):
-    """Replace lines @include filename with file contents from base_dir. Paths resolved under base_dir."""
-    base_dir = Path(base_dir).resolve()
-    out = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("@include "):
-            name = stripped[8:].strip()
-            inc_path = (base_dir / name).resolve()
-            if not str(inc_path).startswith(str(base_dir)):
-                _warn(f"Warning: @include {name!r} resolves outside {base_dir}")
-                continue
-            if not inc_path.exists():
-                _warn(f"Warning: @include {name!r} not found")
-                continue
-            out.append(inc_path.read_text(encoding="utf-8"))
-        else:
-            out.append(line)
-    return "\n".join(out)
-
-
 def load_status_order():
     """Load content/status.txt: one status per line, in sort order (most ready first). Required."""
     p = CONTENT_DIR / "status.txt"
@@ -132,134 +106,24 @@ def load_status_order():
     return order
 
 
-def _render_samples_html(nuggets, status_order, copy, count=5, full_section=False):
-    """Render sample seed rows (or full seed-list-section when full_section=True)."""
-    status_rank = {s: i for i, s in enumerate(status_order)}
-    key_status = lambda n: status_rank.get(n.get("status", "empty"), len(status_order))
-    key_num = lambda n: int(n.get("number", "0")) if (n.get("number") or "").isdigit() else 0
-    by_ready = sorted(nuggets, key=lambda n: (key_status(n), key_num(n)))
-    recent = by_ready[:count]
-    d = "d/"
-    rows_html = ""
-    for n in recent:
-        fname = n.get("filename", "") + ".html"
-        num = n.get("number", "")
-        title = n.get("title", "")
-        subtitle = n.get("subtitle", "")
-        status = n.get("status", "empty")
-        stub = " stub" if status == "empty" else ""
-        rows_html += f"""
-    <a href="{d}{fname}" class="seed-row{stub}">
-      <div class="seed-num">{display_number(num)}</div>
-      <div>
-        <div class="seed-title">{title}</div>
-        <div class="seed-sub">{subtitle}</div>
-      </div>
-      <div class="seed-status-col">{status}</div>
-    </a>"""
-    if not full_section:
-        return rows_html.strip()
-    total = len(nuggets)
-    view_all_text = (copy.get("view_all") or "View all {n} seeds →").replace("{n}", str(total))
-    return f"""
-  <div class="seed-list-section">
-    <div class="section-head">
-      <span class="mono small">{copy.get("section_head", "All seeds")}</span>
-      <a href="{d}list.html" class="link-mono-small">{copy.get("repo_link", "Full repository →")}</a>
-    </div>
-    {rows_html}
-    <div class="seed-list-more-wrap">
-      <a href="{d}list.html" class="link-mono-accent">{view_all_text}</a>
-    </div>
-  </div>"""
-
-
-def expand_page_directives(text, context):
-    """Replace @directives in page content. Returns (text_with_placeholders, {placeholder: html}).
-    context: nuggets, status_order, copy, build_time, page."""
-    if not text:
-        return text, {}
-    nuggets = context.get("nuggets") or []
-    status_order = context.get("status_order") or []
-    copy = context.get("copy") or {}
-    build_time = context.get("build_time")
-    page = context.get("page")
-    out = []
-    replacements = {}
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("@samples"):
-            rest = stripped[7:].strip()
-            count = 5
-            if rest.isdigit():
-                count = min(int(rest), 50)
-            if nuggets and status_order:
-                full = page == "home"
-                block = _render_samples_html(nuggets, status_order, copy, count=count, full_section=full)
-                placeholder = "{{SAMPLES}}"
-                replacements[placeholder] = block
-                out.append(placeholder)
-            continue
-        if stripped == "@timestamp" and build_time:
-            t = build_time.strftime("%Y-%m-%d %H:%M Pacific")
-            out.append(t)
-            continue
-        out.append(line)
-    return "\n".join(out), replacements
-
-
-# ── Markdown page processor (single pipeline for all .md pages) ─────────────────
-def process_md_to_html(md_path, context=None):
-    """When the builder encounters a .md file, it uses this pipeline: load, @include, @directives, markdown → HTML."""
-    if context is None:
-        context = {}
-    if not md_path.exists():
-        raise SystemExit(f"Missing markdown file: {md_path}")
-    if markdown is None:
-        raise SystemExit(
-            "Markdown pages require the markdown package.\n"
-            "  pip install markdown\n"
-            "Or in a venv: pip install -r requirements.txt"
-        )
-    if "build_time" not in context and BUILD_TIME is not None:
-        context = {**context, "build_time": BUILD_TIME}
-    raw = md_path.read_text(encoding="utf-8")
-    base_dir = md_path.parent.resolve()
-    raw = _expand_includes(raw, base_dir)
-    expanded, replacements = expand_page_directives(raw, context)
-    for placeholder, block in replacements.items():
-        expanded = expanded.replace(placeholder, block)
-    if not expanded.strip():
-        return ""
-    html = markdown.markdown(
-        expanded,
-        extensions=["fenced_code", "tables"],
-        extension_configs={"fenced_code": {}},
-    )
-    html = re.sub(
-        r'<p>(TBD|No reviews completed yet\.)</p>',
-        r'<p class="dim placeholder">\1</p>',
-        html,
-    )
-    return html
-
-
 # ── HTML helpers ──────────────────────────────────────────────────────────────
 
-def _head_links(css_href="site.css"):
+def _head_links(css_href="site.css", icon_href="d/logo.svg"):
     return f"""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{css_href}">
+<link rel="icon" type="image/svg+xml" href="{icon_href}">
 """
 
 def nav(from_d=False):
     """About, List, Resources. from_d=True for pages under d/."""
     prefix = "" if from_d else "d/"
     index_href = "../index.html" if from_d else "index.html"
+    logo_src = "logo.svg" if from_d else "d/logo.svg"
     return f"""
 <nav>
-  <a href="{index_href}" class="nav-logo">Seed Nuggets</a>
+  <a href="{index_href}" class="nav-logo"><img src="{logo_src}" alt="" class="nav-logo-icon">Seed Nuggets</a>
   <ul class="nav-links">
     <li><a href="{prefix}about.html">About</a></li>
     <li><a href="{prefix}list.html">List</a></li>
@@ -271,7 +135,10 @@ def foot():
     return ""
 
 def head(title, extra="", at_root=False):
-    links = _head_links("d/site.css" if at_root else "site.css")
+    links = _head_links(
+        "d/site.css" if at_root else "site.css",
+        "favicon.svg" if at_root else "logo.svg",
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -840,13 +707,18 @@ def build_tags_page(nuggets, status_order, explainer_terms=None):
     return html
 
 
+def _md_context(**overrides):
+    """Default context for process_md_to_html: warn, build_time. Merge with overrides."""
+    return {"warn": _warn, "build_time": BUILD_TIME, **overrides}
+
+
 def build_index(nuggets, index_copy, status_order):
-    context = {"nuggets": nuggets, "status_order": status_order, "copy": index_copy, "page": "home"}
+    context = _md_context(nuggets=nuggets, status_order=status_order, copy=index_copy, page="home")
     body_html = process_md_to_html(CONTENT_DIR / "home.md", context)
 
     html = head("Seed Nuggets", at_root=True)
     html += nav()
-    html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
+    html += f'<div class="wrap"><div class="page-body home-page fade">{body_html}</div></div>'
     html += foot()
     html += close()
     return html
@@ -862,7 +734,7 @@ def build_static_page(title, body_html):
 
 
 def build_resources_page():
-    body_html = process_md_to_html(CONTENT_DIR / "resources.md", {})
+    body_html = process_md_to_html(CONTENT_DIR / "resources.md", _md_context())
     html = head("Resources")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -872,7 +744,7 @@ def build_resources_page():
 
 
 def build_about_page():
-    body_html = process_md_to_html(ABOUT_DIR / "page.md", {})
+    body_html = process_md_to_html(ABOUT_DIR / "page.md", _md_context())
     html = head("About")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -882,7 +754,7 @@ def build_about_page():
 
 
 def build_internal_page():
-    body_html = process_md_to_html(INTERNAL_DIR / "page.md", {})
+    body_html = process_md_to_html(INTERNAL_DIR / "page.md", _md_context())
     html = head("Internal")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -1088,6 +960,9 @@ def main():
     if not filter_num:
         shutil.copy(CONTENT_DIR / "site.css", SITE_DIR / "site.css")
         print("  Built site.css")
+        if (CONTENT_DIR / "logo.svg").exists():
+            shutil.copy(CONTENT_DIR / "logo.svg", SITE_DIR / "logo.svg")
+            print("  Built logo.svg")
 
         (SITE_DIR / "list.html").write_text(build_list(nuggets, status_order), encoding="utf-8")
         print("  Built list.html")
@@ -1120,6 +995,9 @@ def main():
 
         (_ROOT / "index.html").write_text(build_index(nuggets, index_copy, status_order), encoding="utf-8")
         print("  Built index.html")
+        if (CONTENT_DIR / "logo.svg").exists():
+            shutil.copy(CONTENT_DIR / "logo.svg", _ROOT / "favicon.svg")
+            print("  Built favicon.svg (root)")
 
         (SITE_DIR / "map.html").write_text(build_static_page("Map", build_map_body(nuggets)), encoding="utf-8")
         print("  Built map.html")
