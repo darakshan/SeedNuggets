@@ -10,6 +10,7 @@ Usage:
     python build.py --nugget 001   # rebuild single nugget
 """
 
+import csv
 import hashlib
 import html as _html
 import os
@@ -32,8 +33,15 @@ ABOUT_DIR = _ROOT / "about"
 INTERNAL_DIR = _ROOT / "internal"
 CONTENT_DIR = _ROOT / "content"
 NOTES_DIR = _ROOT / "notes"
-EXPLAINERS_MD = NOTES_DIR / "explainers-for-terms.md"
+EXPLAINERS_CSV = CONTENT_DIR / "explainers.csv"
 SITE_DIR = _ROOT / "d"
+
+MD_PAGE_PATHS = [
+    CONTENT_DIR / "home.md",
+    CONTENT_DIR / "resources.md",
+    ABOUT_DIR / "page.md",
+    INTERNAL_DIR / "page.md",
+]
 
 BUILD_TIME = None
 _warn_count = 0
@@ -57,13 +65,13 @@ def get_build_input_files():
     files = set()
     for p in NUGGETS_DIR.glob("*.txt"):
         files.add(p)
-    for name in ["index.txt", "status.txt", "resources.md", "site.css"]:
+    for name in ["index.txt", "home.md", "status.txt", "resources.md", "site.css"]:
         p = CONTENT_DIR / name
         if p.exists():
             files.add(p)
-    if EXPLAINERS_MD.exists():
-        files.add(EXPLAINERS_MD)
-    for main in [CONTENT_DIR / "resources.md", ABOUT_DIR / "page.md", INTERNAL_DIR / "page.md"]:
+    if EXPLAINERS_CSV.exists():
+        files.add(EXPLAINERS_CSV)
+    for main in MD_PAGE_PATHS:
         if main.exists():
             files.update(_input_files_for_page(main))
     return sorted(files, key=lambda p: str(p))
@@ -79,33 +87,8 @@ def _warn(msg):
     print(msg, file=sys.stderr)
     _warn_count += 1
 
-def about_body_to_html(body):
-    """Convert about-page body from Markdown to HTML. Requires the markdown package (pip install markdown)."""
-    if not body.strip():
-        return ""
-    if markdown is None:
-        raise SystemExit(
-            "About pages use Markdown. Install the markdown package:\n"
-            "  pip install markdown\n"
-            "Or in a venv: pip install -r requirements.txt"
-        )
-    html = markdown.markdown(
-        body,
-        extensions=["fenced_code", "tables"],
-        extension_configs={"fenced_code": {}},
-    )
-    html = re.sub(
-        r'<p>(TBD|No reviews completed yet\.)</p>',
-        r'<p class="dim placeholder">\1</p>',
-        html,
-    )
-    t = (BUILD_TIME or datetime.now(ZoneInfo("America/Los_Angeles"))).strftime("%Y-%m-%d %H:%M Pacific")
-    html = html.replace("@timestamp", t)
-    return html
-
-
 def load_index_copy():
-    """Load content/index.txt as key: value dict."""
+    """Load content/index.txt as key: value dict (labels, section_head, repo_link, etc.)."""
     p = CONTENT_DIR / "index.txt"
     if not p.exists():
         return {}
@@ -140,41 +123,6 @@ def _expand_includes(text, base_dir):
     return "\n".join(out)
 
 
-def load_page_md(dir_path, main_filename, required=False):
-    """Load a directory page: main file with @include, or all .md alphabetically with ## heading. Returns markdown."""
-    dir_path = Path(dir_path)
-    main_path = dir_path / main_filename
-    if main_path.exists():
-        return _expand_includes(main_path.read_text(encoding="utf-8"), dir_path)
-    if required:
-        raise SystemExit(f"Required file missing: {main_path}")
-    parts = []
-    for f in sorted(dir_path.glob("*.md")):
-        parts.append(f"## {f.stem}\n\n{f.read_text(encoding='utf-8')}")
-    return "\n\n".join(parts) if parts else ""
-
-
-def load_resources_content():
-    """Load content/resources.md (with @include). Required."""
-    if not (CONTENT_DIR / "resources.md").exists():
-        raise SystemExit("Required file missing: content/resources.md")
-    return load_page_md(CONTENT_DIR, "resources.md")
-
-
-def load_about_page_content():
-    """Load about/page.md (with @include). Required."""
-    if not (ABOUT_DIR / "page.md").exists():
-        raise SystemExit("Required file missing: about/page.md")
-    return load_page_md(ABOUT_DIR, "page.md", required=True)
-
-
-def load_internal_page_content():
-    """Load internal/page.md (with @include). Required."""
-    if not (INTERNAL_DIR / "page.md").exists():
-        raise SystemExit("Required file missing: internal/page.md")
-    return load_page_md(INTERNAL_DIR, "page.md", required=True)
-
-
 def load_status_order():
     """Load content/status.txt: one status per line, in sort order (most ready first). Required."""
     p = CONTENT_DIR / "status.txt"
@@ -182,6 +130,118 @@ def load_status_order():
         raise SystemExit("Required file missing: content/status.txt")
     order = [line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
     return order
+
+
+def _render_samples_html(nuggets, status_order, copy, count=5, full_section=False):
+    """Render sample seed rows (or full seed-list-section when full_section=True)."""
+    status_rank = {s: i for i, s in enumerate(status_order)}
+    key_status = lambda n: status_rank.get(n.get("status", "empty"), len(status_order))
+    key_num = lambda n: int(n.get("number", "0")) if (n.get("number") or "").isdigit() else 0
+    by_ready = sorted(nuggets, key=lambda n: (key_status(n), key_num(n)))
+    recent = by_ready[:count]
+    d = "d/"
+    rows_html = ""
+    for n in recent:
+        fname = n.get("filename", "") + ".html"
+        num = n.get("number", "")
+        title = n.get("title", "")
+        subtitle = n.get("subtitle", "")
+        status = n.get("status", "empty")
+        stub = " stub" if status == "empty" else ""
+        rows_html += f"""
+    <a href="{d}{fname}" class="seed-row{stub}">
+      <div class="seed-num">{display_number(num)}</div>
+      <div>
+        <div class="seed-title">{title}</div>
+        <div class="seed-sub">{subtitle}</div>
+      </div>
+      <div class="seed-status-col">{status}</div>
+    </a>"""
+    if not full_section:
+        return rows_html.strip()
+    total = len(nuggets)
+    view_all_text = (copy.get("view_all") or "View all {n} seeds →").replace("{n}", str(total))
+    return f"""
+  <div class="seed-list-section">
+    <div class="section-head">
+      <span class="mono small">{copy.get("section_head", "All seeds")}</span>
+      <a href="{d}list.html" class="link-mono-small">{copy.get("repo_link", "Full repository →")}</a>
+    </div>
+    {rows_html}
+    <div class="seed-list-more-wrap">
+      <a href="{d}list.html" class="link-mono-accent">{view_all_text}</a>
+    </div>
+  </div>"""
+
+
+def expand_page_directives(text, context):
+    """Replace @directives in page content. Returns (text_with_placeholders, {placeholder: html}).
+    context: nuggets, status_order, copy, build_time, page."""
+    if not text:
+        return text, {}
+    nuggets = context.get("nuggets") or []
+    status_order = context.get("status_order") or []
+    copy = context.get("copy") or {}
+    build_time = context.get("build_time")
+    page = context.get("page")
+    out = []
+    replacements = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("@samples"):
+            rest = stripped[7:].strip()
+            count = 5
+            if rest.isdigit():
+                count = min(int(rest), 50)
+            if nuggets and status_order:
+                full = page == "home"
+                block = _render_samples_html(nuggets, status_order, copy, count=count, full_section=full)
+                placeholder = "{{SAMPLES}}"
+                replacements[placeholder] = block
+                out.append(placeholder)
+            continue
+        if stripped == "@timestamp" and build_time:
+            t = build_time.strftime("%Y-%m-%d %H:%M Pacific")
+            out.append(t)
+            continue
+        out.append(line)
+    return "\n".join(out), replacements
+
+
+# ── Markdown page processor (single pipeline for all .md pages) ─────────────────
+def process_md_to_html(md_path, context=None):
+    """When the builder encounters a .md file, it uses this pipeline: load, @include, @directives, markdown → HTML."""
+    if context is None:
+        context = {}
+    if not md_path.exists():
+        raise SystemExit(f"Missing markdown file: {md_path}")
+    if markdown is None:
+        raise SystemExit(
+            "Markdown pages require the markdown package.\n"
+            "  pip install markdown\n"
+            "Or in a venv: pip install -r requirements.txt"
+        )
+    if "build_time" not in context and BUILD_TIME is not None:
+        context = {**context, "build_time": BUILD_TIME}
+    raw = md_path.read_text(encoding="utf-8")
+    base_dir = md_path.parent.resolve()
+    raw = _expand_includes(raw, base_dir)
+    expanded, replacements = expand_page_directives(raw, context)
+    for placeholder, block in replacements.items():
+        expanded = expanded.replace(placeholder, block)
+    if not expanded.strip():
+        return ""
+    html = markdown.markdown(
+        expanded,
+        extensions=["fenced_code", "tables"],
+        extension_configs={"fenced_code": {}},
+    )
+    html = re.sub(
+        r'<p>(TBD|No reviews completed yet\.)</p>',
+        r'<p class="dim placeholder">\1</p>',
+        html,
+    )
+    return html
 
 
 # ── HTML helpers ──────────────────────────────────────────────────────────────
@@ -208,10 +268,7 @@ def nav(from_d=False):
 </nav>"""
 
 def foot():
-    return """
-<footer>
-  <span>Seed Nuggets</span>
-</footer>"""
+    return ""
 
 def head(title, extra="", at_root=False):
     links = _head_links("d/site.css" if at_root else "site.css")
@@ -476,14 +533,14 @@ def build_list(nuggets, status_order):
         num_val = key_num(n)
         date_val = date.strip() or "0000-00-00"
         title_attr = _html.escape(title, quote=True)
+        meta_parts = [f'<span class="{status_class}">{status}</span>']
+        if date.strip():
+            meta_parts.append(f'<span class="mono repo-date">{date}</span>')
+        meta_parts.append(f'<span class="repo-tags">{tag_links}</span>')
+        meta_line = " · ".join(meta_parts)
         rows += f"""
     <tr data-num="{num_val}" data-date="{date_val}" data-status-rank="{rank}" data-title="{title_attr}">
-      <td class="mono repo-cell-mono">{display_number(num)}</td>
-      <td class="mono repo-cell-mono">{shortname}</td>
-      <td><a href="{fname}">{title}</a><br><span class="repo-subtitle">{subtitle}</span></td>
-      <td class="{status_class}">{status}</td>
-      <td class="mono repo-date">{date}</td>
-      <td class="repo-tags">{tag_links}</td>
+      <td><div class="repo-list-title"><span class="mono repo-cell-mono">{display_number(num)}</span> <a href="{fname}">{title}</a></div><div class="repo-list-meta">{meta_line}</div></td>
     </tr>"""
 
     sort_script = """
@@ -509,27 +566,17 @@ def build_list(nuggets, status_order):
     html = head("List")
     html += nav(from_d=True)
     html += f"""
-<div class="wrap">
+<div class="wrap wrap--list">
   <div class="page-body fade">
     <h1>List</h1>
     <p class="dim repo-intro">All seed nuggets. The canonical list. Generated from source files.</p>
     <p class="repo-sort-wrap"><label for="repo-sort">Sort: </label><select id="repo-sort" class="repo-sort" aria-label="Sort table">
       <option value="status">By status</option>
       <option value="number">By number</option>
-      <option value="alpha">Alphabetical</option>
+      <option value="alpha">By name</option>
       <option value="recent">By most recent</option>
     </select></p>
     <table class="repo-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Name</th>
-          <th>Title / Subtitle</th>
-          <th>Status</th>
-          <th>Date</th>
-          <th>Tags</th>
-        </tr>
-      </thead>
       <tbody>{rows}
       </tbody>
     </table>
@@ -545,90 +592,155 @@ def tag_slug(tag):
 
 
 def term_slug(term):
-    """Slug for explainer term anchors: lowercase, spaces to hyphens, parentheticals to one word."""
-    s = re.sub(r"\s*\([^)]*\)\s*", " ", term).strip()
-    s = s.lower().replace(" ", "-")
-    s = re.sub(r"[^a-z0-9-]", "", s)
+    """Slug for explainer term anchors: lowercase, spaces to hyphens, parentheticals become -inner-."""
+    s = re.sub(r"\s*\(([^)]*)\)\s*", r"-\1-", term)
+    s = s.strip().lower().replace(" ", "-")
+    s = re.sub(r"[^a-z0-9-]", "", s).strip("-")
     return s or "term"
 
 
-def parse_explainers_md(path, nuggets):
-    """Parse explainers-for-terms.md. Skip header; collect terms and bullets until 'Still to search'.
-    Returns list of dicts: term, slug, nugget_nums, links [(url, link_text)], notes [str].
-    """
+def load_explainers_csv(path):
+    """Load content/explainers.csv. Returns list of dicts: term, slug, links [{url, duration, title}], notes [str]."""
     if not path.exists():
         return []
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    term_line_re = re.compile(r"^\*\*(.+?)\*\*(\s*\([^)]*\))?\s*[—\-]\s*(.+)$")
-    url_re = re.compile(r"^\s*-\s*(https://\S+)(?:\s+(\(.+\)))?\s*$")
-    still_re = re.compile(r"^\*\*Still to search\*\*", re.I)
-    result = []
-    i = 0
-    while i < len(lines):
-        m = term_line_re.match(lines[i])
-        if m:
-            part1 = m.group(1).strip()
-            part2 = (m.group(2) or "").strip()
-            if part2:
-                inner = part2.lstrip(" (").rstrip(")")
-                term = f"{part1} ({inner})" if inner else part1
+    by_term = {}
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.reader(f):
+            if len(row) < 4 or (row[0].lower() == "term" and row[1].lower() == "url"):
+                continue
+            term, url, duration, title = (row[0].strip(), row[1].strip(), row[2].strip(), row[3].strip())
+            if not term:
+                continue
+            if term not in by_term:
+                by_term[term] = {"links": [], "notes": []}
+            if url.lower() == "comment":
+                by_term[term]["notes"].append(title)
             else:
-                term = part1
-            refs_str = m.group(3).strip()
-            nugget_nums = [x.strip() for x in refs_str.split(",") if x.strip() and re.match(r"^\d+$", x.strip())]
-            links = []
-            notes = []
-            i += 1
-            while i < len(lines) and not term_line_re.match(lines[i]) and not still_re.match(lines[i].strip()):
-                line = lines[i]
-                if line.strip().startswith("- "):
-                    rest = line.strip()[2:].strip()
-                    url_m = re.match(r"(https://\S+)(?:\s+(\(.+\)))?\s*$", rest)
-                    if url_m:
-                        url = url_m.group(1).strip()
-                        link_text = url_m.group(2).strip() if url_m.group(2) else "Watch"
-                        if link_text.startswith("(") and link_text.endswith(")"):
-                            link_text = link_text[1:-1].strip()
-                        links.append((url, link_text))
-                    else:
-                        notes.append(rest)
-                i += 1
-            result.append({"term": term, "slug": term_slug(term), "nugget_nums": nugget_nums, "links": links, "notes": notes})
-            continue
-        i += 1
-    return result
+                by_term[term]["links"].append({"url": url, "duration": duration or "?:??", "title": title or "Watch"})
+    return [
+        {"term": term, "slug": term_slug(term), "links": data["links"], "notes": data["notes"]}
+        for term, data in by_term.items()
+    ]
 
 
-def _clean_explainer_link_text(text):
-    """Remove 'check duration; ' and 'check duration, ' from link text; use 'Watch' if empty."""
+def get_glossary_terms(nuggets):
+    """Set of term strings from #term in all nuggets."""
+    out = set()
+    for n in nuggets:
+        for term, _ in n.get("terms", []):
+            out.add(term)
+    return out
+
+
+def ensure_explainers_has_glossary_terms(csv_path, glossary_terms):
+    """Append any glossary term missing from the CSV as a comment row (No explainers found yet.). Returns list of added terms."""
+    existing_terms = set()
+    rows = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+        if header and len(header) >= 4:
+            rows.append(header)
+        for row in reader:
+            if len(row) >= 4 and row[0].strip():
+                existing_terms.add(row[0].strip())
+                rows.append(row)
+    added = []
+    for t in sorted(glossary_terms):
+        if t not in existing_terms:
+            rows.append([t, "comment", "", "(No explainers found yet.)"])
+            added.append(t)
+    if added:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerows(rows)
+    return added
+
+
+def _parse_explainer_link_text(text):
+    """Parse link text into (duration_display, title). Duration is 'M:SS' or ''; title is cleaned or 'Watch'."""
     for prefix in ("check duration; ", "check duration, "):
         if text.startswith(prefix):
             text = text[len(prefix) :].strip()
     if not text or text in ("(", ")", "()"):
-        return "Watch"
-    return text
+        return ("", "Watch")
+    m = re.match(r"^(\d+):(\d+)[;,]?\s*(.*)$", text)
+    if m:
+        mins, secs = int(m.group(1)), int(m.group(2))
+        total_secs = mins * 60 + secs
+        display_m, display_s = total_secs // 60, total_secs % 60
+        title = m.group(3).strip()
+        return (f"{display_m}:{display_s:02d}", title if title else "Watch")
+    m = re.match(r"^(\d+)\s*min(?:\s+(\d+)\s*secs?)?[;,]?\s*(.*)$", text, re.IGNORECASE)
+    if m:
+        mins = int(m.group(1))
+        secs = int(m.group(2)) if m.group(2) else 0
+        total_secs = mins * 60 + secs
+        display_m, display_s = total_secs // 60, total_secs % 60
+        title = m.group(3).strip()
+        return (f"{display_m}:{display_s:02d}", title if title else "Watch")
+    return ("", text.strip() or "Watch")
+
+
+def _title_case(s):
+    """Return string in Title Case (major words capitalized, small words lowercase unless first/last)."""
+    if not s:
+        return s
+    small = frozenset(
+        "a an the and but or for nor on at to by of in with as is it".split()
+    )
+    words = s.split()
+    result = []
+    for i, w in enumerate(words):
+        if not w:
+            result.append(w)
+            continue
+        lower = w.lower()
+        if lower in small and i != 0 and i != len(words) - 1:
+            result.append(lower)
+        else:
+            result.append(w[0].upper() + w[1:].lower() if len(w) > 1 else w.upper())
+    return " ".join(result)
+
+
+def _explainer_sort_key(term):
+    """Sort key for terms: strip leading 'The ' for alphabetical order."""
+    t = term.strip().lower()
+    if t.startswith("the "):
+        t = t[4:].strip()
+    return t
 
 
 def build_explainers_page(nuggets, explainer_terms):
-    """Build explainers.html from parsed explainers data. Terms sorted alphabetically; uses glossary styles."""
+    """Build explainers.html from explainers data. Terms sorted alphabetically (strip 'The ' for sort); uses glossary styles."""
     if not explainer_terms:
-        body = '<p class="dim">No explainers list. Add <code>notes/explainers-for-terms.md</code>.</p>'
+        body = '<p class="dim">No explainers list. Add <code>content/explainers.csv</code>.</p>'
     else:
-        sorted_terms = sorted(explainer_terms, key=lambda t: t["term"].lower())
+        sorted_terms = sorted(explainer_terms, key=lambda t: _explainer_sort_key(t["term"]))
         parts = []
         for entry in sorted_terms:
             term = entry["term"]
             slug = entry["slug"]
             term_esc = _html.escape(term)
-            link_items = []
-            for url, link_text in entry["links"]:
-                url_esc = _html.escape(url)
-                cleaned = _clean_explainer_link_text(link_text)
-                text_esc = _html.escape(cleaned)
-                link_items.append(f'<a href="{url_esc}" target="_blank" rel="noopener">{text_esc}</a>')
-            links_inline = " ".join(link_items) if link_items else ""
-            links_block = f'<div class="gloss-defs"><div class="gloss-def-block">{links_inline}</div></div>' if links_inline else ""
+            real_notes = [n for n in entry.get("notes", []) if n != "(No explainers found yet.)"]
+            if not entry["links"]:
+                real_notes = ["(No explainers found yet.)"]
+            notes_html = "".join(
+                '<p class="dim explainer-notes">' + _html.escape(n) + "</p>" for n in real_notes
+            )
+            link_lines = []
+            for link in entry["links"]:
+                url_esc = _html.escape(link["url"])
+                dur_display = link["duration"] or "?:??"
+                title_esc = _html.escape(_title_case(link["title"]))
+                link_lines.append(
+                    f'<div class="explainer-link-line">'
+                    f'<span class="explainer-dur">{dur_display}</span> '
+                    f'<a class="explainer-link" href="{url_esc}" target="_blank" rel="noopener">{title_esc}</a>'
+                    f'</div>'
+                )
+            links_html = "".join(link_lines)
+            block_content = notes_html + links_html
+            links_block = f'<div class="gloss-defs"><div class="gloss-def-block">{block_content}</div></div>'
             parts.append(
                 f'<div id="{_html.escape(slug)}" class="gloss-entry">'
                 f'<div class="gloss-term-line"><strong class="gloss-term">{term_esc}</strong></div>'
@@ -638,7 +750,7 @@ def build_explainers_page(nuggets, explainer_terms):
         body = "\n".join(parts)
     html = head("Explainers")
     html += nav(from_d=True)
-    html += f'<div class="wrap"><div class="page-body fade"><h1>Explainers</h1><p class="dim repo-intro">Video explainers for glossary terms.</p>{body}</div></div>'
+    html += f'<div class="wrap"><div class="page-body fade"><h1>Explainers</h1><p class="dim repo-intro">Video explainers for glossary terms. (Relevance not verified)</p>{body}</div></div>'
     html += foot()
     html += close()
     return html
@@ -692,7 +804,7 @@ def build_tags_page(nuggets, status_order, explainer_terms=None):
 
     terms_block = ""
     if explainer_terms:
-        sorted_explainer = sorted(explainer_terms, key=lambda t: t["term"].lower())
+        sorted_explainer = sorted(explainer_terms, key=lambda t: _explainer_sort_key(t["term"]))
         term_parts = []
         for entry in sorted_explainer:
             term_esc = _html.escape(entry["term"])
@@ -729,80 +841,12 @@ def build_tags_page(nuggets, status_order, explainer_terms=None):
 
 
 def build_index(nuggets, index_copy, status_order):
-    c = index_copy
-    status_rank = {s: i for i, s in enumerate(status_order)}
-    key_status = lambda n: status_rank.get(n.get("status", "empty"), len(status_order))
-    key_num = lambda n: int(n.get("number", "0")) if (n.get("number") or "").isdigit() else 0
-    by_ready = sorted(nuggets, key=lambda n: (key_status(n), key_num(n)))
-    ready = [n for n in nuggets if n.get("status") not in ("empty",)]
-    total = len(nuggets)
-    ready_count = len(ready)
-    d = "d/"
-
-    recent = by_ready[:5]
-    recent_html = ""
-    for n in recent:
-        fname = n.get("filename", "") + ".html"
-        num = n.get("number", "")
-        title = n.get("title", "")
-        subtitle = n.get("subtitle", "")
-        status = n.get("status", "empty")
-        stub = " stub" if status == "empty" else ""
-        recent_html += f"""
-    <a href="{d}{fname}" class="seed-row{stub}">
-      <div class="seed-num">{display_number(num)}</div>
-      <div>
-        <div class="seed-title">{title}</div>
-        <div class="seed-sub">{subtitle}</div>
-      </div>
-      <div class="seed-status-col">{status}</div>
-    </a>"""
-
-    view_all_text = (c.get("view_all") or "View all {n} seeds →").replace("{n}", str(total))
-    about_cards = [
-        f'<a href="{d}about.html" class="about-card">About</a>',
-    ]
+    context = {"nuggets": nuggets, "status_order": status_order, "copy": index_copy, "page": "home"}
+    body_html = process_md_to_html(CONTENT_DIR / "home.md", context)
 
     html = head("Seed Nuggets", at_root=True)
     html += nav()
-    html += f"""
-<div class="wrap">
-  <div class="hero fade">
-    <span class="mono small warm hero-notice">{c.get("notice", "")}</span>
-    <h1>Seed Nuggets</h1>
-    <p class="hero-tagline">{c.get("tagline", "")}</p>
-    <p class="hero-purpose">{c.get("purpose", "")}</p>
-
-    <div class="hero-stats">
-      <div>
-        <div class="mono small warm">{total}</div>
-        <div class="hero-stat-label">{c.get("stat_label_1", "seeds defined")}</div>
-      </div>
-      <div>
-        <div class="mono small warm">{ready_count}</div>
-        <div class="hero-stat-label">{c.get("stat_label_2", "with content")}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="seed-list-section">
-    <div class="section-head">
-      <span class="mono small">{c.get("section_head", "All seeds")}</span>
-      <a href="{d}list.html" class="link-mono-small">{c.get("repo_link", "Full repository →")}</a>
-    </div>
-    {recent_html}
-    <div class="seed-list-more-wrap">
-      <a href="{d}list.html" class="link-mono-accent">{view_all_text}</a>
-    </div>
-  </div>
-
-  <div class="about-block">
-    <div class="mono small warm about-block-label">{c.get("about_heading", "About this project")}</div>
-    <div class="about-grid">
-      {"".join(about_cards)}
-    </div>
-  </div>
-</div>"""
+    html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
     html += foot()
     html += close()
     return html
@@ -818,9 +862,7 @@ def build_static_page(title, body_html):
 
 
 def build_resources_page():
-    """Build Resources page from content/resources.md (with @include). Body contains its own heading."""
-    raw = load_resources_content()
-    body_html = about_body_to_html(raw) if raw.strip() else ""
+    body_html = process_md_to_html(CONTENT_DIR / "resources.md", {})
     html = head("Resources")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -830,9 +872,7 @@ def build_resources_page():
 
 
 def build_about_page():
-    """Build About page from about/page.md (with @include)."""
-    raw = load_about_page_content()
-    body_html = about_body_to_html(raw) if raw.strip() else ""
+    body_html = process_md_to_html(ABOUT_DIR / "page.md", {})
     html = head("About")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -842,9 +882,7 @@ def build_about_page():
 
 
 def build_internal_page():
-    """Build Internal page from internal/page.md (with @include)."""
-    raw = load_internal_page_content()
-    body_html = about_body_to_html(raw) if raw.strip() else ""
+    body_html = process_md_to_html(INTERNAL_DIR / "page.md", {})
     html = head("Internal")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -1028,8 +1066,9 @@ def main():
             else:
                 seen_num[num] = n.get("filename")
 
-    load_about_page_content()
-    load_internal_page_content()
+    for md_path in MD_PAGE_PATHS:
+        if not md_path.exists():
+            raise SystemExit(f"Required file missing: {md_path}")
     status_order = load_status_order()
     index_copy = load_index_copy()
 
@@ -1053,7 +1092,11 @@ def main():
         (SITE_DIR / "list.html").write_text(build_list(nuggets, status_order), encoding="utf-8")
         print("  Built list.html")
 
-        explainer_terms = parse_explainers_md(EXPLAINERS_MD, nuggets)
+        if EXPLAINERS_CSV.exists():
+            added = ensure_explainers_has_glossary_terms(EXPLAINERS_CSV, get_glossary_terms(nuggets))
+            for t in added:
+                print("  Added explainer term:", t)
+        explainer_terms = load_explainers_csv(EXPLAINERS_CSV)
         (SITE_DIR / "explainers.html").write_text(build_explainers_page(nuggets, explainer_terms), encoding="utf-8")
         print("  Built explainers.html")
 
