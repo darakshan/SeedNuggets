@@ -14,14 +14,16 @@
 </head>
 <body>
 <nav>
+  <div class="nav-row">
   <a href="index.html" class="nav-logo"><img src="d/logo.svg" alt="" class="nav-logo-icon">Seed Nuggets</a>
   <ul class="nav-links">
     <li><a href="d/about.html">About</a></li>
     <li><a href="d/list.html">List</a></li>
     <li><a href="d/resources.html">Resources</a></li>
   </ul>
+</div>
 </nav><div class="wrap"><div class="page-body home-page fade"><h3>Working archive — not for public consumption</h3>
-<h1>Seed Nuggets</h1>
+<h1>Seed Nuggets test1</h1>
 <h2>Small ideas that change how you see. Start anywhere!<br><br></h2>
 <p>Seed Nuggets is a collection of ideas ("nuggets") that many of us will find surprising. Each is elaborated in several ways - a simple surface of the idea, a deep dive into it, references to works that go even further, a dramatic exposition, images (or for now, ideas for images).</p>
 <p>The collection is alive, every changing, incomplete, and growing, as we complete and refine the sections and add new nuggets.</p>
@@ -79,5 +81,20 @@
 <hr />
 <h3>About this project</h3>
 <p><a href="d/about.html">About</a></p></div></div>
+<script>
+(function(){
+  var t = 0;
+  function update(){
+    var y = window.scrollY || window.pageYOffset;
+    var on = y > 80;
+    if (on === (document.body.classList.contains("nav-scrolled"))) return;
+    document.body.classList.toggle("nav-scrolled", on);
+  }
+  window.addEventListener("scroll", function(){ if (t) cancelAnimationFrame(t); t = requestAnimationFrame(update); }, { passive: true });
+  window.addEventListener("load", update);
+  update();
+})();
+</script>
+
 </body>
 </html>

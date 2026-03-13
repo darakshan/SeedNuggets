@@ -116,23 +116,44 @@ def _head_links(css_href="site.css", icon_href="d/logo.svg"):
 <link rel="icon" type="image/svg+xml" href="{icon_href}">
 """
 
-def nav(from_d=False):
-    """About, List, Resources. from_d=True for pages under d/."""
+def nav(from_d=False, layer_tabs_html=None):
+    """About, List, Resources. from_d=True for pages under d/. layer_tabs_html optional for nugget pages."""
     prefix = "" if from_d else "d/"
     index_href = "../index.html" if from_d else "index.html"
     logo_src = "logo.svg" if from_d else "d/logo.svg"
-    return f"""
-<nav>
+    row = f"""  <div class="nav-row">
   <a href="{index_href}" class="nav-logo"><img src="{logo_src}" alt="" class="nav-logo-icon">Seed Nuggets</a>
   <ul class="nav-links">
     <li><a href="{prefix}about.html">About</a></li>
     <li><a href="{prefix}list.html">List</a></li>
     <li><a href="{prefix}resources.html">Resources</a></li>
   </ul>
+</div>"""
+    extra = f"\n{layer_tabs_html}" if layer_tabs_html else ""
+    return f"""
+<nav>
+{row}{extra}
 </nav>"""
 
+NAV_SCROLL_SCRIPT = """
+<script>
+(function(){
+  var t = 0;
+  function update(){
+    var y = window.scrollY || window.pageYOffset;
+    var on = y > 80;
+    if (on === (document.body.classList.contains("nav-scrolled"))) return;
+    document.body.classList.toggle("nav-scrolled", on);
+  }
+  window.addEventListener("scroll", function(){ if (t) cancelAnimationFrame(t); t = requestAnimationFrame(update); }, { passive: true });
+  window.addEventListener("load", update);
+  update();
+})();
+</script>
+"""
+
 def foot():
-    return ""
+    return NAV_SCROLL_SCRIPT
 
 def head(title, extra="", at_root=False):
     links = _head_links(
@@ -345,14 +366,10 @@ def build_nugget(n, all_nuggets):
     prev_n = sorted_nuggets[idx - 1] if idx > 0 else None
     next_n = sorted_nuggets[idx + 1] if 0 <= idx < len(sorted_nuggets) - 1 else None
 
-    prev_html = f'<a href="{prev_n.get("filename", "")}.html">&laquo;</a>' if prev_n else ''
-    next_html = f'<a href="{next_n.get("filename", "")}.html">&raquo;</a>' if next_n else ''
+    prev_html = f'<a href="{prev_n.get("filename", "")}.html">&lt;&lt;</a>' if prev_n else ''
+    next_html = f'<a href="{next_n.get("filename", "")}.html">&gt;&gt;</a>' if next_n else ''
 
-    html = head(f"{display_number(num)} — {title}")
-    html += nav(from_d=True)
-    html += f"""
-<div class="wrap">
-  <div class="layer-tabs">
+    layer_tabs_html = f"""  <div class="layer-tabs">
     <div class="layer-tabs-inner">
       <span class="layer-tabs-prev">{prev_html}</span>
       <div class="layer-tabs-center">
@@ -360,8 +377,12 @@ def build_nugget(n, all_nuggets):
       </div>
       <span class="layer-tabs-next">{next_html}</span>
     </div>
-  </div>
+  </div>"""
 
+    html = head(f"{display_number(num)} — {title}")
+    html += nav(from_d=True, layer_tabs_html=layer_tabs_html)
+    html += f"""
+<div class="wrap">
   <div class="nugget-header fade">
     <div class="meta-row">
       <span class="mono small warm">Seed {display_number(num)}</span>
@@ -903,22 +924,20 @@ def main():
         filter_num = sys.argv[idx + 1]
 
     nothing_changed = False
-    if not filter_num:
-        current_hash = get_build_input_hash()
-        if BUILD_STATE_FILE.exists():
-            lines = BUILD_STATE_FILE.read_text(encoding="utf-8").splitlines()
-            if len(lines) >= 2 and lines[0].strip() == current_hash:
-                try:
-                    BUILD_TIME = datetime.fromisoformat(lines[1].strip())
-                    nothing_changed = True
-                except ValueError:
-                    BUILD_TIME = datetime.now(ZoneInfo("America/Los_Angeles"))
-            else:
-                BUILD_TIME = datetime.now(ZoneInfo("America/Los_Angeles"))
-        else:
+    state_lines = BUILD_STATE_FILE.read_text(encoding="utf-8").splitlines() if BUILD_STATE_FILE.exists() else []
+    if len(state_lines) >= 2:
+        try:
+            BUILD_TIME = datetime.fromisoformat(state_lines[1].strip())
+        except ValueError:
             BUILD_TIME = datetime.now(ZoneInfo("America/Los_Angeles"))
     else:
         BUILD_TIME = datetime.now(ZoneInfo("America/Los_Angeles"))
+    if not filter_num:
+        current_hash = get_build_input_hash()
+        if len(state_lines) >= 2 and state_lines[0].strip() == current_hash:
+            nothing_changed = True
+        else:
+            BUILD_TIME = datetime.now(ZoneInfo("America/Los_Angeles"))
 
     if filter_num:
         SITE_DIR.mkdir(exist_ok=True)
