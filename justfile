@@ -24,3 +24,12 @@ find-explainers:
     @cat {{root}}/notes/recipe-find-explainers.md
     @echo ""
     @echo "When the agent completes, run: just build"
+
+# Review nuggets: surface/depth length, in-degree, underlinked, final+TBD, #related max 5, #note. Exit 1 if any fail.
+# just check         — summary + detailed findings (all nuggets)
+# just check -q       — summary only
+# just check -v       — summary + details + notes (interleaved by nugget)
+# just check 3        — check only 003, show notes (implies -v)
+# just check 3 4 19 99  — check 003, 004, 019; warn if 99 missing
+check *ARGS:
+    {{python}} {{root}}/src/check.py {{ARGS}}

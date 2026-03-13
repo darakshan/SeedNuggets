@@ -2,7 +2,9 @@
 # Seed Nuggets
 ## Small ideas that change how you see. Start anywhere!<br><br>
 
-The deeper purpose of this project is intuition repair — our own as much as anyone's. Most of these seed nuggets are not introducing new information. They are revisiting assumptions so familiar they've become invisible. Each seed nugget earns its place by containing a genuine surprise: a moment where the world turns out to be slightly different from what we'd been assuming. The surprise is the point.
+Seed Nuggets is a collection of ideas ("nuggets") that many of us will find surprising. Each is elaborated in several ways - a simple surface of the idea, a deep dive into it, references to works that go even further, a dramatic exposition, images (or for now, ideas for images).
+
+The collection is alive, every changing, incomplete, and growing, as we complete and refine the sections and add new nuggets.
 
 @samples
 

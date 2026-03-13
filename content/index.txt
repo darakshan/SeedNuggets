@@ -1,3 +1,9 @@
 section_head: All seeds
 repo_link: Full repository →
 view_all: View all {n} seeds →
+
+surface_min_words: 400
+surface_max_words: 700
+depth_min_words: 300
+depth_max_words: 600
+min_related_in_degree: 2

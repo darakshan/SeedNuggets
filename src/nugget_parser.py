@@ -25,6 +25,7 @@ def parse_nugget(filepath, warn=None):
     layers = {}
     refs = []
     terms = []
+    notes = []
     current_layer = None
     buffer = []
 
@@ -60,6 +61,10 @@ def parse_nugget(filepath, warn=None):
                         terms.append((raw, ""))
                 else:
                     w(f"Warning: {filepath}: #term only allowed in #provenance (found in or before {current_layer or 'metadata'})")
+                continue
+            if key == "note":
+                flush()
+                notes.append(value.strip())
                 continue
             elif key in SINGLE_LINE:
                 flush()
@@ -99,6 +104,7 @@ def parse_nugget(filepath, warn=None):
     meta["related"] = related_parsed
     meta["refs"] = refs
     meta["terms"] = terms
+    meta["notes"] = notes
 
     meta["layers"] = {
         "surface": layers.get("surface", "TBD"),

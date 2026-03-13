@@ -38,6 +38,10 @@ The build script parses nugget files strictly. Follow this grammar so new or rev
 - **Only inside `#provenance`.** Each line: `#term` followed by a space and the term, then an em dash (`—`), then the definition (e.g. `#term Paradigm — Thomas Kuhn's term for the framework...`). One term per line. If `#term` appears in any other section it is an error (the build warns and ignores it).
 - The build collects terms from **all** nuggets and generates the Glossary page: terms sorted alphabetically, grouped so the same term from multiple nuggets appears once with each definition indented; each entry lists which nuggets define it (In: …).
 
+####Editorial notes (#note)
+
+- `#note` — any line `#note ...` is an editorial comment. It is not included in any layer and is omitted from page generation. The check tool reports all `#note` lines; use `just check -v` or `just check -v 001 002` to list them.
+
 ####Layers (multi-line sections)
 
 - Section start: a line that is exactly `#surface`, `#depth`, `#provenance`, `#script`, or `#images` (no text after the name). Parser treats these as layer names, not metadata.
