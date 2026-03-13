@@ -1,9 +1,10 @@
 """
 Markdown page processor: single pipeline for all .md pages.
-Load file → @include → @directives → markdown → HTML.
+Load file → @include → @directives → @link → markdown → HTML.
 Used by build.py for home, about, resources, internal pages.
 """
 
+import html as _html
 import re
 from pathlib import Path
 
@@ -11,6 +12,60 @@ try:
     import markdown
 except ImportError:
     markdown = None
+
+_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _md_link_output_name(md_path):
+    """Return the d/ filename for a referenced .md file: path relative to repo with / → -, .md → .html."""
+    try:
+        rel = md_path.resolve().relative_to(_ROOT)
+    except ValueError:
+        return None
+    parts = list(rel.parts)
+    if not parts or not str(rel).endswith(".md"):
+        return None
+    parts[-1] = Path(parts[-1]).stem + ".html"
+    return "-".join(parts)
+
+
+def expand_links(text, context, base_dir, collected_md_refs=None):
+    """Replace @link(locator, text) with <a href="...">text</a>. Runs before markdown.
+    locator: nugget number (e.g. 002) or path like internal/inside.md (relative to repo root).
+    collected_md_refs: optional set to add referenced .md paths to (for build to emit)."""
+    if collected_md_refs is None:
+        collected_md_refs = set()
+    from nugget_parser import nugget_by_number
+
+    def repl(m):
+        locator = m.group(1).strip()
+        link_text = m.group(2).strip()
+        if not link_text:
+            link_text = locator
+        if re.match(r"^\d+$", locator):
+            nuggets = context.get("nuggets") or []
+            n = nugget_by_number(nuggets, locator)
+            if not n:
+                n = nugget_by_number(nuggets, locator.zfill(3))
+            if not n:
+                context.get("warn", lambda msg: None)(f"@link: nugget {locator!r} not found")
+                return m.group(0)
+            href = n.get("filename", "") + ".html"
+            return f'<a href="{href}">{_html.escape(link_text)}</a>'
+        if locator.endswith(".md"):
+            md_path = (_ROOT / locator).resolve()
+            if not md_path.exists():
+                context.get("warn", lambda msg: None)(f"@link: file not found {locator!r}")
+                return m.group(0)
+            collected_md_refs.add(md_path)
+            out_name = _md_link_output_name(md_path)
+            if not out_name:
+                context.get("warn", lambda msg: None)(f"@link: invalid path {locator!r}")
+                return m.group(0)
+            return f'<a href="{out_name}">{_html.escape(link_text)}</a>'
+        return f'<a href="{_html.escape(locator)}">{_html.escape(link_text)}</a>'
+
+    return re.sub(r"@link\s*\(\s*([^,)]+)\s*,\s*([^)]*)\s*\)", repl, text)
 
 
 def _display_number(num):
@@ -122,11 +177,14 @@ def expand_page_directives(text, context):
     return "\n".join(out), replacements
 
 
-def process_md_to_html(md_path, context=None):
-    """Single pipeline for .md → HTML: load file, @include, @directives, markdown. Returns body HTML.
-    context: copy (index.txt), nuggets, status_order, page, build_time, warn (callable)."""
+def process_md_to_html(md_path, context=None, collected_md_refs=None):
+    """Single pipeline for .md → HTML: load file, @include, @directives, @link, markdown. Returns body HTML.
+    context: copy (index.txt), nuggets, status_order, page, build_time, warn (callable).
+    collected_md_refs: optional set; referenced .md paths (for @link) are added for build to emit."""
     if context is None:
         context = {}
+    if collected_md_refs is None:
+        collected_md_refs = set()
     if not md_path.exists():
         raise SystemExit(f"Missing markdown file: {md_path}")
     if markdown is None:
@@ -142,6 +200,7 @@ def process_md_to_html(md_path, context=None):
     expanded, replacements = expand_page_directives(raw, context)
     for placeholder, block in replacements.items():
         expanded = expanded.replace(placeholder, block)
+    expanded = expand_links(expanded, context, base_dir, collected_md_refs)
     if not expanded.strip():
         return ""
     html = markdown.markdown(

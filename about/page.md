@@ -11,8 +11,8 @@ What are the goals of this project?
 Who are the audiences we hope to reach?  
 
 ### Additional information:
-Tell me about the [authors](../about/authors.md).  
-We hope to get [reviews](../about/reviews.md).
+Tell me about the @link(about/authors.md, authors).
+We hope to get @link(about/reviews.md, reviews).
 
 ---
 

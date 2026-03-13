@@ -1,6 +1,6 @@
-## Context
+## Early Stucture
 
-This document is a few days old.  Much of it is redundant or obsolete.  What's not should be integrated into the other sections
+This document is already a few days old.  Much of it is redundant or obsolete.  What's not should be integrated into the other sections
 
 ### Briefing for a new AI working session
 

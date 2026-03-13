@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 _ROOT = Path(__file__).resolve().parent.parent
 from nugget_parser import NUGGETS_DIR, load_all_nuggets, nugget_by_number, expand_nugget_directives
-from md_pages import process_md_to_html
+from md_pages import process_md_to_html, expand_includes, _md_link_output_name
 
 ABOUT_DIR = _ROOT / "about"
 INTERNAL_DIR = _ROOT / "internal"
@@ -56,6 +56,25 @@ def _input_files_for_page(main_path):
                 out.add(inc_path)
     return out
 
+
+def _referenced_md_from_md_pages():
+    """Set of .md paths referenced via @link(locator, text) from main MD pages (transitive)."""
+    refs = set()
+    to_scan = list(MD_PAGE_PATHS)
+    while to_scan:
+        path = to_scan.pop(0)
+        if not path.exists():
+            continue
+        text = expand_includes(path.read_text(encoding="utf-8"), path.parent) if path.suffix == ".md" else ""
+        for m in re.finditer(r"@link\s*\(\s*([^,)]+)\s*,", text):
+            loc = m.group(1).strip()
+            if not re.match(r"^\d+$", loc) and ".md" in loc:
+                p = (_ROOT / loc).resolve()
+                if p not in refs and p.exists():
+                    refs.add(p)
+                    to_scan.append(p)
+    return refs
+
 def get_build_input_files():
     files = set()
     for p in NUGGETS_DIR.glob("*.txt"):
@@ -69,6 +88,7 @@ def get_build_input_files():
     for main in MD_PAGE_PATHS:
         if main.exists():
             files.update(_input_files_for_page(main))
+    files.update(_referenced_md_from_md_pages())
     return sorted(files, key=lambda p: str(p))
 
 def get_build_input_hash():
@@ -304,8 +324,10 @@ def build_nugget(n, all_nuggets):
 
     def layer_has_content(layer_id):
         if layer_id == "references":
-            prov_raw = (layers.get("provenance") or "TBD").strip()
-            return prov_raw != "TBD" or bool(rel_nuggets) or bool(n.get("refs"))
+            prov_raw = layers.get("provenance", "TBD")
+            prov_expanded = expand_nugget_directives(prov_raw, all_nuggets) if prov_raw else prov_raw
+            prov_has_content = (prov_expanded or "TBD").strip() != "TBD"
+            return prov_has_content or bool(n.get("refs")) or bool(rel_nuggets)
         raw = (layers.get(layer_id) or "TBD").strip()
         return raw != "TBD"
 
@@ -733,9 +755,9 @@ def _md_context(**overrides):
     return {"warn": _warn, "build_time": BUILD_TIME, **overrides}
 
 
-def build_index(nuggets, index_copy, status_order):
+def build_index(nuggets, index_copy, status_order, collected_md_refs=None):
     context = _md_context(nuggets=nuggets, status_order=status_order, copy=index_copy, page="home")
-    body_html = process_md_to_html(CONTENT_DIR / "home.md", context)
+    body_html = process_md_to_html(CONTENT_DIR / "home.md", context, collected_md_refs=collected_md_refs)
 
     html = head("Seed Nuggets", at_root=True)
     html += nav()
@@ -748,14 +770,15 @@ def build_index(nuggets, index_copy, status_order):
 def build_static_page(title, body_html):
     html = head(title)
     html += nav(from_d=True)
-    html += f'<div class="wrap"><div class="page-body fade"><h1>{title}</h1>{body_html}</div></div>'
+    html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
     html += foot()
     html += close()
     return html
 
 
-def build_resources_page():
-    body_html = process_md_to_html(CONTENT_DIR / "resources.md", _md_context())
+def build_resources_page(nuggets=None, collected_md_refs=None):
+    context = _md_context(nuggets=nuggets or [])
+    body_html = process_md_to_html(CONTENT_DIR / "resources.md", context, collected_md_refs=collected_md_refs)
     html = head("Resources")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -764,8 +787,9 @@ def build_resources_page():
     return html
 
 
-def build_about_page():
-    body_html = process_md_to_html(ABOUT_DIR / "page.md", _md_context())
+def build_about_page(nuggets=None, collected_md_refs=None):
+    context = _md_context(nuggets=nuggets or [])
+    body_html = process_md_to_html(ABOUT_DIR / "page.md", context, collected_md_refs=collected_md_refs)
     html = head("About")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -774,8 +798,9 @@ def build_about_page():
     return html
 
 
-def build_internal_page():
-    body_html = process_md_to_html(INTERNAL_DIR / "page.md", _md_context())
+def build_internal_page(nuggets=None, collected_md_refs=None):
+    context = _md_context(nuggets=nuggets or [])
+    body_html = process_md_to_html(INTERNAL_DIR / "page.md", context, collected_md_refs=collected_md_refs)
     html = head("Internal")
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
@@ -887,7 +912,7 @@ def build_map_body(nuggets):
             cells.append(f'<td class="{cls}">{"·" if linked else ""}</td>')
         rows.append("<tr>" + "".join(cells) + "</tr>")
     table = "<table class=\"map-matrix\">\n" + "\n".join(rows) + "\n</table>"
-    return f'<p>Rows = from seed, columns = to seed. Marked cell means the row seed links to the column seed in its Related list.</p>\n{table}'
+    return f'<h1>Map</h1>\n<p>Rows = from seed, columns = to seed. Marked cell means the row seed links to the column seed in its Related list.</p>\n{table}'
 
 
 def build_nuggets_index():
@@ -997,14 +1022,32 @@ def main():
         (SITE_DIR / "tags.html").write_text(build_tags_page(nuggets, status_order, explainer_terms), encoding="utf-8")
         print("  Built tags.html")
 
-        (SITE_DIR / "resources.html").write_text(build_resources_page(), encoding="utf-8")
+        collected_md_refs = set()
+        (SITE_DIR / "resources.html").write_text(build_resources_page(nuggets, collected_md_refs), encoding="utf-8")
         print("  Built resources.html")
 
-        (SITE_DIR / "about.html").write_text(build_about_page(), encoding="utf-8")
+        (SITE_DIR / "about.html").write_text(build_about_page(nuggets, collected_md_refs), encoding="utf-8")
         print("  Built about.html")
 
-        (SITE_DIR / "internal.html").write_text(build_internal_page(), encoding="utf-8")
+        (SITE_DIR / "internal.html").write_text(build_internal_page(nuggets, collected_md_refs), encoding="utf-8")
         print("  Built internal.html")
+
+        built_md_refs = set()
+        to_build = list(collected_md_refs)
+        while to_build:
+            md_path = to_build.pop(0)
+            if md_path in built_md_refs:
+                continue
+            built_md_refs.add(md_path)
+            body_html = process_md_to_html(md_path, _md_context(nuggets=nuggets), collected_md_refs)
+            title = md_path.stem.replace("-", " ").title()
+            out_name = _md_link_output_name(md_path)
+            if out_name:
+                (SITE_DIR / out_name).write_text(build_static_page(title, body_html), encoding="utf-8")
+                print(f"  Built {out_name}")
+            for p in collected_md_refs - built_md_refs:
+                if p not in to_build:
+                    to_build.append(p)
 
         (SITE_DIR / "bibliography.html").write_text(build_bibliography_page(nuggets), encoding="utf-8")
         print("  Built bibliography.html")
@@ -1012,7 +1055,7 @@ def main():
         (SITE_DIR / "glossary.html").write_text(build_glossary_page(nuggets, explainer_terms), encoding="utf-8")
         print("  Built glossary.html")
 
-        (_ROOT / "index.html").write_text(build_index(nuggets, index_copy, status_order), encoding="utf-8")
+        (_ROOT / "index.html").write_text(build_index(nuggets, index_copy, status_order, collected_md_refs), encoding="utf-8")
         print("  Built index.html")
         if (CONTENT_DIR / "logo.svg").exists():
             shutil.copy(CONTENT_DIR / "logo.svg", _ROOT / "favicon.svg")
