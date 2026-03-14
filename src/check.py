@@ -7,6 +7,7 @@ check.py — Review nuggets for structure guidelines.
 - Final + TBD: status final but any layer still TBD
 - #related max 5
 - Report #note directives (editorial comments; ignored in page generation)
+- Status vs sections (surface, depth, script, images; provenance ignored): empty=0, prelim=1, partial=2–3, complete=4
 
 Usage:
   python src/check.py              # summary + detailed findings (all nuggets)
@@ -28,9 +29,19 @@ STATUS_TXT = CONTENT_DIR / "status.txt"
 
 
 def _word_count(text):
-    if not text or (text.strip() or "").upper() == "TBD":
+    if not text or _section_missing(text):
         return 0
     return len(text.split())
+
+
+def _section_missing(text):
+    body = (text or "").strip()
+    if not body:
+        return True
+    if body.upper() == "TBD":
+        return True
+    lines = [l.strip() for l in body.splitlines() if l.strip()]
+    return len(lines) == 1 and lines[0].upper().startswith("TBD")
 
 
 def load_index_params():
@@ -109,14 +120,14 @@ def main():
         d_words = _word_count(depth)
         run_limits = _status_at_least_draft(status)
 
-        if run_limits and surface.strip().upper() != "TBD":
+        if run_limits and not _section_missing(surface):
             lo, hi = params["surface_min_words"], params["surface_max_words"]
             if s_words < lo:
                 errors.append(("length", f"{fn}: surface has {s_words} words (min {lo})"))
             elif s_words > hi:
                 errors.append(("length", f"{fn}: surface has {s_words} words (max {hi})"))
 
-        if run_limits and depth.strip().upper() != "TBD":
+        if run_limits and not _section_missing(depth):
             lo, hi = params["depth_min_words"], params["depth_max_words"]
             if d_words < lo:
                 errors.append(("length", f"{fn}: depth has {d_words} words (min {lo})"))
@@ -137,9 +148,24 @@ def main():
 
         if status == "final":
             for layer_name in ("surface", "depth", "provenance", "script", "images"):
-                body = (layers.get(layer_name) or "TBD").strip().upper()
-                if body == "TBD":
+                if _section_missing(layers.get(layer_name)):
                     errors.append(("final_tbd", f"{fn}: status final but #{layer_name} is TBD"))
+
+        section_names = ("surface", "depth", "script", "images")
+        n_sections = sum(1 for name in section_names if not _section_missing(layers.get(name)))
+        if n_sections == 0:
+            expected_status = "empty"
+        elif n_sections == 1:
+            expected_status = "prelim"
+        elif n_sections <= 3:
+            expected_status = "partial"
+        else:
+            expected_status = "complete"
+        if expected_status == "complete":
+            if status in ("empty", "prelim", "partial"):
+                errors.append(("status", f"{fn}: has all 4 sections but status is {status!r} (expected draft1/final)"))
+        elif status != expected_status:
+            errors.append(("status", f"{fn}: has {n_sections} section(s) but status is {status!r} (expected {expected_status})"))
 
     counts = {}
     for kind, _ in errors:
@@ -159,6 +185,8 @@ def main():
         parts.append(f"{counts['final_tbd']} final+TBD")
     if counts.get("over_related"):
         parts.append(f"{counts['over_related']} over-related")
+    if counts.get("status"):
+        parts.append(f"{counts['status']} status")
     suffix = f" — {n_issues} issues" if n_issues else " — ok"
     summary = ", ".join(parts) + suffix + "."
     print(summary, file=sys.stderr)

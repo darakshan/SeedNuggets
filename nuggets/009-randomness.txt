@@ -14,7 +14,7 @@ TBD
 The early universe was almost perfectly uniform. Almost, but not quite. Quantum fluctuations — irreducibly random, foundationally indeterminate — broke the symmetry in the tiniest ways. Gravity amplified them. What began as a near-featureless field became, over billions of years, galaxies, stars, planets, oceans, cells. All structure traces its ancestry to that original breaking of symmetry by events too small to see. Pure randomness, given sufficient events and sufficient time, generates structure necessarily — not despite the randomness but almost because of it.
 
 #provenance
-Prigogine's dissipative structures. Kauffman's autocatalytic sets and "order for free." Standard cosmological inflation and structure formation.
+TBD Prigogine's dissipative structures. Kauffman's autocatalytic sets and "order for free." Standard cosmological inflation and structure formation.
 
 #script
 TBD

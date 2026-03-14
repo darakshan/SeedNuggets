@@ -29,7 +29,7 @@ Each seed also carries:
 - number (permanent identifier)
 - short name (used in filename and URL)
 - title, subtitle (one sentence)
-- status (empty / partial / draft1 / final)
+- status (see below)
 - date added
 - tags, and 
 - related seeds (up to five, by number), and
@@ -37,3 +37,16 @@ Each seed also carries:
 - key terms (#term): optional lines inside **#provenance** only; each line is `#term Term — Definition`. The build generates the shared Glossary page (terms grouped, definitions indented; lists which nuggets define each).
 
 These are stored in the source .txt file and used to build the repository, navigation, and bibliography automatically. See the grammar file for details on how all of these are represented.
+
+### Status
+
+Status reflects how many of the four main layers (Surface, Depth, Script, Images) have real content. Provenance is ignored for this count. A layer counts as having content only if it is not empty, and not a single line that is or starts with "TBD".
+
+| Status   | Meaning | Sections with content |
+|----------|---------|------------------------|
+| **empty**  | Nothing written yet | 0 |
+| **prelim** | First layer in progress | 1 |
+| **partial** | Two or three layers done | 2 or 3 |
+| **draft1** or **final** | Complete; all four layers have content | 4 |
+
+Use **draft1** when the nugget is complete but still open to revision, **final** when it is locked. The check tool reports a mismatch if status does not match the section count.

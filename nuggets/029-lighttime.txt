@@ -2,7 +2,7 @@
 #shortname lighttime
 #title From Light's Point of View, There Is No Journey
 #subtitle A photon leaves a star and arrives at your eye. From the photon's perspective, these are the same moment.
-#status partial
+#status prelim
 #date 2026-03-12
 #tags physics, time, relativity, consciousness, fields
 #related 008, 002, 017
