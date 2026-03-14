@@ -2,3 +2,4 @@
 .venv
 .buildstate
 d/
+__pycache__/

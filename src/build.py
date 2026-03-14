@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 build.py — Seed Nuggets site generator
-Reads nugget .txt files from repo nuggets/, writes HTML to repo d/.
+Reads from content/ and config/; writes to d/ (and index.html at root).
 Generates: nugget pages, list.html, tags.html (Index),
 index.html, about pages, resources (with map), site.css.
 
@@ -22,13 +22,23 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 _ROOT = Path(__file__).resolve().parent.parent
-from nugget_parser import NUGGETS_DIR, load_all_nuggets, nugget_by_number, expand_nugget_directives
+from nugget_parser import (
+    CONFIG_DIR,
+    CONTENT_DIR,
+    NUGGETS_DIR,
+    display_number,
+    expand_nugget_directives,
+    load_all_nuggets,
+    load_index_copy,
+    load_status_order,
+    nugget_by_number,
+    section_is_tbd,
+)
 from md_pages import process_md_to_html, expand_includes, _md_link_output_name
 
-ABOUT_DIR = _ROOT / "about"
-INTERNAL_DIR = _ROOT / "internal"
-CONTENT_DIR = _ROOT / "content"
-EXPLAINERS_CSV = CONTENT_DIR / "explainers.csv"
+ABOUT_DIR = CONTENT_DIR / "about"
+INTERNAL_DIR = CONTENT_DIR / "internal"
+EXPLAINERS_CSV = CONFIG_DIR / "explainers.csv"
 SITE_DIR = _ROOT / "d"
 
 def _get_md_page_paths():
@@ -73,7 +83,7 @@ def _referenced_md_from_md_pages():
         for m in re.finditer(r"@link\s*\(\s*([^,)]+)\s*,", text):
             loc = m.group(1).strip()
             if not re.match(r"^\d+$", loc) and ".md" in loc:
-                p = (_ROOT / loc).resolve()
+                p = (CONTENT_DIR / loc).resolve()
                 if p not in refs and p.exists():
                     refs.add(p)
                     to_scan.append(p)
@@ -83,7 +93,11 @@ def get_build_input_files():
     files = set()
     for p in NUGGETS_DIR.glob("*.txt"):
         files.add(p)
-    for name in ["index.txt", "home.md", "status.txt", "site.css", "logo.svg"]:
+    for name in ["index.txt", "status.txt", "site.css", "logo.svg"]:
+        p = CONFIG_DIR / name
+        if p.exists():
+            files.add(p)
+    for name in ["home.md"]:
         p = CONTENT_DIR / name
         if p.exists():
             files.add(p)
@@ -106,21 +120,6 @@ def _warn(msg):
     print(msg, file=sys.stderr)
     _warn_count += 1
 
-def load_index_copy():
-    """Load content/index.txt as key: value dict (labels, section_head, repo_link, etc.)."""
-    p = CONTENT_DIR / "index.txt"
-    if not p.exists():
-        return {}
-    out = {}
-    for line in p.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        out[key.strip()] = value.strip()
-    return out
-
-
 _NAV_ITEMS = None
 
 
@@ -136,22 +135,22 @@ def _first_h1(path):
 
 
 def get_nav_items(index_copy=None):
-    """Resolve nav key from index.txt to list of (href, label, kind, path).
-    nav value is comma-separated tokens. Label = token title-cased. Single source of truth."""
+    """Resolve nav key from config index to list of (href, label, kind, path).
+    nav value is comma-separated tokens. Label = token title-cased. Paths under content/."""
     raw = (index_copy or load_index_copy()).get("nav", "about, list, more")
     tokens = [t.strip() for t in raw.split(",") if t.strip()]
     out = []
     for token in tokens:
         label = token.replace("-", " ").title()
-        md_file = _ROOT / f"{token}.md"
+        md_file = CONTENT_DIR / f"{token}.md"
         if md_file.exists():
             out.append((f"{token}.html", label, "file", md_file))
             continue
-        dir_path = _ROOT / token
+        dir_path = CONTENT_DIR / token
         if dir_path.is_dir() and (dir_path / "page.md").exists():
             out.append((f"{token}.html", label, "dir", dir_path))
             continue
-        _warn(f"nav item {token!r} not found: no {token}.md nor {token}/page.md in repo root")
+        _warn(f"nav item {token!r} not found: no content/{token}.md nor content/{token}/page.md")
     return out
 
 
@@ -162,12 +161,10 @@ def _nav_items():
     return _NAV_ITEMS
 
 
-def load_status_order():
-    """Load content/status.txt: one status per line, in sort order (most ready first). Required."""
-    p = CONTENT_DIR / "status.txt"
-    if not p.exists():
-        raise SystemExit("Required file missing: content/status.txt")
-    order = [line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+def _require_status_order():
+    order = load_status_order()
+    if not order:
+        raise SystemExit("Required file missing: config/status.txt")
     return order
 
 
@@ -182,11 +179,11 @@ def _head_links(css_href="site.css", icon_href="d/logo.svg"):
 """
 
 def nav(from_d=False, from_nuggets=False, layer_tabs_html=None):
-    """Top nav: logo left; menu items from index.txt (nav key). from_d=True for pages under d/; from_nuggets=True for nuggets/index.html."""
+    """Top nav: logo left; menu items from config index (nav key). from_d=True for pages under d/; from_nuggets=True for d/nuggets/index.html."""
     if from_nuggets:
-        prefix, index_href, logo_src = "../d/", "../index.html", "../d/logo.svg"
+        prefix, index_href, logo_src = "../", "../index.html", "../logo.svg"
     elif from_d:
-        prefix, index_href, logo_src = "", "index.html", "logo.svg"
+        prefix, index_href, logo_src = "", "../index.html", "logo.svg"
     else:
         prefix, index_href, logo_src = "d/", "index.html", "d/logo.svg"
     links = "".join(
@@ -253,16 +250,18 @@ def head(title, extra="", at_root=False, css_href=None, icon_href=None):
 def close():
     return "\n</body>\n</html>"
 
+_LIST_MARKERS = ("- ", "* ")
+
+
 def _block_to_html(block):
     """Convert a single block (paragraph or list) to HTML."""
     lines = [ln.strip() for ln in block.strip().splitlines() if ln.strip()]
     if not lines:
         return ""
-    list_markers = ("- ", "* ")
-    if any(ln.startswith(list_markers) for ln in lines):
+    if any(ln.startswith(_LIST_MARKERS) for ln in lines):
         items = []
         for ln in lines:
-            for m in list_markers:
+            for m in _LIST_MARKERS:
                 if ln.startswith(m):
                     items.append(f"<li>{ln[len(m):].strip()}</li>")
                     break
@@ -273,17 +272,16 @@ def _block_to_html(block):
 
 def text_to_html(text):
     """Convert plain text with --- dividers, paragraphs, and - / * lists to HTML."""
-    if text.strip() == "TBD":
+    if section_is_tbd(text):
         return '<p class="dim placeholder">This layer is not yet written.</p>'
     parts = text.split("\n---\n")
     html_parts = []
-    list_markers = ("- ", "* ")
     for part in parts:
         blocks = []
         current = []
         in_list = None
         for line in part.splitlines():
-            is_list_line = any(line.strip().startswith(m) for m in list_markers)
+            is_list_line = any(line.strip().startswith(m) for m in _LIST_MARKERS)
             if is_list_line:
                 if in_list is False and current:
                     blocks.append("\n".join(current))
@@ -313,7 +311,7 @@ def text_to_html(text):
 
 def script_to_html(text):
     """Format script text with direction lines highlighted."""
-    if text.strip() == "TBD":
+    if section_is_tbd(text):
         return '<p class="dim placeholder">Script not yet written.</p>'
     lines = text.strip().splitlines()
     out = []
@@ -374,7 +372,7 @@ def build_nugget(n, all_nuggets):
 
     surface_raw = layers.get("surface", "TBD")
     surface_expanded = expand_nugget_directives(surface_raw, all_nuggets) if surface_raw else surface_raw
-    surface_html = "" if (surface_expanded or "TBD").strip() == "TBD" else text_to_html(surface_expanded)
+    surface_html = "" if section_is_tbd(surface_expanded) else text_to_html(surface_expanded)
     if surface_html and "Try this:" in surface_expanded:
         parts = surface_expanded.split("Try this:")
         before = text_to_html("Try this:".join(parts[:-1]))
@@ -385,16 +383,14 @@ def build_nugget(n, all_nuggets):
         if layer_id == "references":
             prov_raw = layers.get("provenance", "TBD")
             prov_expanded = expand_nugget_directives(prov_raw, all_nuggets) if prov_raw else prov_raw
-            prov_has_content = (prov_expanded or "TBD").strip() != "TBD"
-            return prov_has_content or bool(n.get("refs"))
-        raw = (layers.get(layer_id) or "TBD").strip()
-        return raw != "TBD"
+            return not section_is_tbd(prov_expanded) or bool(n.get("refs"))
+        return not section_is_tbd(layers.get(layer_id))
 
     def layer_body(layer_id):
         if layer_id == "references":
             prov_raw = layers.get("provenance", "TBD")
             prov_expanded = expand_nugget_directives(prov_raw, all_nuggets) if prov_raw else prov_raw
-            prov_html = text_to_html(prov_expanded) if (prov_expanded or "TBD").strip() != "TBD" else ""
+            prov_html = text_to_html(prov_expanded) if not section_is_tbd(prov_expanded) else ""
             parts = []
             if prov_html:
                 parts.append(f'<div class="prose">{prov_html}</div>')
@@ -654,13 +650,6 @@ def build_explainers_page(nuggets, explainer_terms):
     return html
 
 
-def display_number(num):
-    """Strip leading zeros for display only; keep filenames/URLs/lookup as-is."""
-    if num and num.isdigit():
-        return str(int(num))
-    return num or "?"
-
-
 def display_number_map(num):
     """Two-digit label for map row/column headers (no spaces)."""
     if num and num.isdigit():
@@ -739,8 +728,8 @@ def build_tags_page(nuggets, status_order, explainer_terms=None):
 
 
 def _md_context(**overrides):
-    """Default context for process_md_to_html: warn, build_time. Merge with overrides."""
-    return {"warn": _warn, "build_time": BUILD_TIME, **overrides}
+    """Default context for process_md_to_html: warn, build_time, content_dir. Merge with overrides."""
+    return {"warn": _warn, "build_time": BUILD_TIME, "content_dir": CONTENT_DIR, **overrides}
 
 
 def build_index(nuggets, index_copy, status_order, collected_md_refs=None):
@@ -918,7 +907,7 @@ def build_nuggets_index(index_copy=None):
     site_url = f"{base}/"
     nuggets_base = f"{base}/nuggets/"
     txt_files = sorted(NUGGETS_DIR.glob("*.txt"))
-    html = head("Source nuggets", css_href="../d/site.css", icon_href="../d/logo.svg")
+    html = head("Source nuggets", css_href="../site.css", icon_href="../logo.svg")
     html += nav(from_nuggets=True)
     html += """
 <div class="wrap">
@@ -935,9 +924,10 @@ def build_nuggets_index(index_copy=None):
   </div>
 </div>
 """
-    html += foot("../d/logo.svg")
+    html += foot("../logo.svg")
     html += close()
-    (NUGGETS_DIR / "index.html").write_text(html, encoding="utf-8")
+    (SITE_DIR / "nuggets").mkdir(parents=True, exist_ok=True)
+    (SITE_DIR / "nuggets" / "index.html").write_text(html, encoding="utf-8")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -986,13 +976,13 @@ def main():
     for md_path in _get_md_page_paths():
         if not md_path.exists():
             raise SystemExit(f"Required file missing: {md_path}")
-    status_order = load_status_order()
+    status_order = _require_status_order()
     index_copy = load_index_copy()
 
     for n in nuggets:
         s = n.get("status", "empty")
         if s not in status_order:
-            _warn(f"Error: nugget {n.get('filename', '?')}: status {s!r} not in content/status.txt")
+            _warn(f"Error: nugget {n.get('filename', '?')}: status {s!r} not in config/status.txt")
 
     for n in nuggets:
         if filter_num and n.get("number") != filter_num:
@@ -1003,10 +993,10 @@ def main():
         print(f"  Built {fname}")
 
     if not filter_num:
-        shutil.copy(CONTENT_DIR / "site.css", SITE_DIR / "site.css")
+        shutil.copy(CONFIG_DIR / "site.css", SITE_DIR / "site.css")
         print("  Built site.css")
-        if (CONTENT_DIR / "logo.svg").exists():
-            shutil.copy(CONTENT_DIR / "logo.svg", SITE_DIR / "logo.svg")
+        if (CONFIG_DIR / "logo.svg").exists():
+            shutil.copy(CONFIG_DIR / "logo.svg", SITE_DIR / "logo.svg")
             print("  Built logo.svg")
 
         if EXPLAINERS_CSV.exists():
@@ -1045,7 +1035,7 @@ def main():
             built_md_refs.add(md_path)
             body_html = process_md_to_html(md_path, _md_context(nuggets=nuggets), collected_md_refs)
             title = md_path.stem.replace("-", " ").title()
-            out_name = _md_link_output_name(md_path)
+            out_name = _md_link_output_name(md_path, CONTENT_DIR)
             if out_name:
                 (SITE_DIR / out_name).write_text(build_static_page(title, body_html), encoding="utf-8")
                 print(f"  Built {out_name}")
@@ -1061,8 +1051,8 @@ def main():
 
         (_ROOT / "index.html").write_text(build_index(nuggets, index_copy, status_order, collected_md_refs), encoding="utf-8")
         print("  Built index.html")
-        if (CONTENT_DIR / "logo.svg").exists():
-            shutil.copy(CONTENT_DIR / "logo.svg", _ROOT / "favicon.svg")
+        if (CONFIG_DIR / "logo.svg").exists():
+            shutil.copy(CONFIG_DIR / "logo.svg", _ROOT / "favicon.svg")
             print("  Built favicon.svg (root)")
 
         (SITE_DIR / "map.html").write_text(build_static_page("Map", build_map_body(nuggets)), encoding="utf-8")
@@ -1076,7 +1066,7 @@ def main():
             encoding="utf-8",
         )
 
-    print(f"\nDone. Site written to repo root (index.html) and {SITE_DIR.relative_to(_ROOT)}/ (docs)")
+    print(f"\nDone. Site written to repo root (index.html) and {SITE_DIR.relative_to(_ROOT)}/")
     if nothing_changed:
         print("Nothing changed; timestamp unchanged.")
     if _warn_count:

@@ -8,6 +8,8 @@ import html as _html
 import re
 from pathlib import Path
 
+from nugget_parser import display_number
+
 try:
     import markdown
 except ImportError:
@@ -16,10 +18,11 @@ except ImportError:
 _ROOT = Path(__file__).resolve().parent.parent
 
 
-def _md_link_output_name(md_path):
-    """Return the d/ filename for a referenced .md file: path relative to repo with / → -, .md → .html."""
+def _md_link_output_name(md_path, content_root=None):
+    """Return the d/ filename for a referenced .md file: path relative to content_root (or repo root) with / → -, .md → .html."""
+    root = (content_root or _ROOT).resolve()
     try:
-        rel = md_path.resolve().relative_to(_ROOT)
+        rel = md_path.resolve().relative_to(root)
     except ValueError:
         return None
     parts = list(rel.parts)
@@ -35,7 +38,7 @@ def expand_links(text, context, base_dir, collected_md_refs=None):
     collected_md_refs: optional set to add referenced .md paths to (for build to emit)."""
     if collected_md_refs is None:
         collected_md_refs = set()
-    from nugget_parser import nugget_by_number
+    from nugget_parser import nugget_by_number_flex
 
     def repl(m):
         locator = m.group(1).strip()
@@ -44,21 +47,20 @@ def expand_links(text, context, base_dir, collected_md_refs=None):
             link_text = locator
         if re.match(r"^\d+$", locator):
             nuggets = context.get("nuggets") or []
-            n = nugget_by_number(nuggets, locator)
-            if not n:
-                n = nugget_by_number(nuggets, locator.zfill(3))
+            n = nugget_by_number_flex(nuggets, locator)
             if not n:
                 context.get("warn", lambda msg: None)(f"@link: nugget {locator!r} not found")
                 return m.group(0)
             href = n.get("filename", "") + ".html"
             return f'<a href="{href}">{_html.escape(link_text)}</a>'
         if locator.endswith(".md"):
-            md_path = (_ROOT / locator).resolve()
+            content_root = context.get("content_dir") or _ROOT
+            md_path = (content_root / locator).resolve()
             if not md_path.exists():
                 context.get("warn", lambda msg: None)(f"@link: file not found {locator!r}")
                 return m.group(0)
             collected_md_refs.add(md_path)
-            out_name = _md_link_output_name(md_path)
+            out_name = _md_link_output_name(md_path, content_root)
             if not out_name:
                 context.get("warn", lambda msg: None)(f"@link: invalid path {locator!r}")
                 return m.group(0)
@@ -66,13 +68,6 @@ def expand_links(text, context, base_dir, collected_md_refs=None):
         return f'<a href="{_html.escape(locator)}">{_html.escape(link_text)}</a>'
 
     return re.sub(r"@link\s*\(\s*([^,)]+)\s*,\s*([^)]*)\s*\)", repl, text)
-
-
-def _display_number(num):
-    """Strip leading zeros for display; used in sample seed rows."""
-    if num and num.isdigit():
-        return str(int(num))
-    return num or "?"
 
 
 def expand_includes(text, base_dir, warn=None):
@@ -124,7 +119,7 @@ def _render_samples_html(
         subtitle = n.get("subtitle", "")
         status = n.get("status", "empty")
         stub = " stub" if status == "empty" else ""
-        num_display = _display_number(num)
+        num_display = display_number(num)
         title_line = f"{num_display}. {title}" if num_display else title
         status_span = f'<span class="seed-status">{_html.escape(status)}</span>'
         byline = f"{_html.escape(subtitle)} · {status_span}" if subtitle else status_span

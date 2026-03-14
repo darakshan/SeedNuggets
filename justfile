@@ -10,7 +10,7 @@ setup:
     python3 -m venv {{root}}/.venv
     {{root}}/.venv/bin/pip install -r {{root}}/requirements.txt
 
-# Rebuild the full site from nuggets/
+# Rebuild the full site (reads content/ and config/, writes d/ and index.html)
 # For another deployment, set base URL: SITE_BASE_URL=https://yoursite.com/path just build
 build:
     {{python}} {{root}}/src/build.py

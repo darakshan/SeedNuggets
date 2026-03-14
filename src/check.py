@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 check.py — Review nuggets for structure guidelines.
-- Surface/depth word counts vs content/index.txt limits
+- Surface/depth word counts vs config/index.txt limits
 - Every nugget pointed to by at least min_related_in_degree others (#related)
 - Underlinked: nuggets with 0 #related
 - Final + TBD: status final but any layer still TBD
@@ -18,30 +18,19 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-from nugget_parser import load_all_nuggets
-
-CONTENT_DIR = _ROOT / "content"
-INDEX_TXT = CONTENT_DIR / "index.txt"
-STATUS_TXT = CONTENT_DIR / "status.txt"
+from nugget_parser import (
+    load_all_nuggets,
+    load_index_copy,
+    load_status_order,
+    section_is_tbd,
+)
 
 
 def _word_count(text):
-    if not text or _section_missing(text):
+    if not text or section_is_tbd(text):
         return 0
     return len(text.split())
-
-
-def _section_missing(text):
-    body = (text or "").strip()
-    if not body:
-        return True
-    if body.upper() == "TBD":
-        return True
-    lines = [l.strip() for l in body.splitlines() if l.strip()]
-    return len(lines) == 1 and lines[0].upper().startswith("TBD")
 
 
 def load_index_params():
@@ -52,29 +41,20 @@ def load_index_params():
         "depth_max_words": 600,
         "min_related_in_degree": 2,
     }
-    if not INDEX_TXT.exists():
-        return out
-    for line in INDEX_TXT.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key, value = key.strip(), value.strip()
-        if key in ("surface_min_words", "surface_max_words", "depth_min_words", "depth_max_words", "min_related_in_degree"):
+    copy = load_index_copy()
+    for key in ("surface_min_words", "surface_max_words", "depth_min_words", "depth_max_words", "min_related_in_degree"):
+        if key in copy:
             try:
-                out[key] = int(value)
+                out[key] = int(copy[key])
             except ValueError:
                 pass
     return out
 
 
-def _status_at_least_draft(status):
-    if not STATUS_TXT.exists():
+def _status_at_least_draft(status, status_order):
+    if not status_order:
         return status in ("draft1", "final")
-    order = [line.strip() for line in STATUS_TXT.read_text(encoding="utf-8").splitlines() if line.strip()]
-    if not order:
-        return status in ("draft1", "final")
-    draft_or_better = {order[0], "final"}
+    draft_or_better = {status_order[0], "final"}
     return status in draft_or_better
 
 
@@ -89,6 +69,7 @@ def main():
 
     params = load_index_params()
     nuggets = load_all_nuggets(warn=lambda _: None)
+    status_order = load_status_order()
     all_numbers = set(n.get("number", "") for n in nuggets if n.get("number"))
     if nugget_filter:
         for a in args:
@@ -118,16 +99,16 @@ def main():
         depth = layers.get("depth", "TBD")
         s_words = _word_count(surface)
         d_words = _word_count(depth)
-        run_limits = _status_at_least_draft(status)
+        run_limits = _status_at_least_draft(status, status_order)
 
-        if run_limits and not _section_missing(surface):
+        if run_limits and not section_is_tbd(surface):
             lo, hi = params["surface_min_words"], params["surface_max_words"]
             if s_words < lo:
                 errors.append(("length", f"{fn}: surface has {s_words} words (min {lo})"))
             elif s_words > hi:
                 errors.append(("length", f"{fn}: surface has {s_words} words (max {hi})"))
 
-        if run_limits and not _section_missing(depth):
+        if run_limits and not section_is_tbd(depth):
             lo, hi = params["depth_min_words"], params["depth_max_words"]
             if d_words < lo:
                 errors.append(("length", f"{fn}: depth has {d_words} words (min {lo})"))
@@ -148,11 +129,11 @@ def main():
 
         if status == "final":
             for layer_name in ("surface", "depth", "provenance", "script", "images"):
-                if _section_missing(layers.get(layer_name)):
+                if section_is_tbd(layers.get(layer_name)):
                     errors.append(("final_tbd", f"{fn}: status final but #{layer_name} is TBD"))
 
         section_names = ("surface", "depth", "script", "images")
-        n_sections = sum(1 for name in section_names if not _section_missing(layers.get(name)))
+        n_sections = sum(1 for name in section_names if not section_is_tbd(layers.get(name)))
         if n_sections == 0:
             expected_status = "empty"
         elif n_sections == 1:
@@ -191,9 +172,6 @@ def main():
     summary = ", ".join(parts) + suffix + "."
     print(summary, file=sys.stderr)
 
-    status_order = []
-    if STATUS_TXT.exists():
-        status_order = [line.strip() for line in STATUS_TXT.read_text(encoding="utf-8").splitlines() if line.strip()]
     by_status = {}
     for n in nuggets_to_check:
         s = n.get("status", "empty")

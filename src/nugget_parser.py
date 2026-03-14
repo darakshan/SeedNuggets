@@ -8,7 +8,62 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
-NUGGETS_DIR = _ROOT / "nuggets"
+CONTENT_DIR = _ROOT / "content"
+CONFIG_DIR = _ROOT / "config"
+NUGGETS_DIR = CONTENT_DIR / "nuggets"
+
+
+def section_is_tbd(text):
+    """True if section is empty or counts as TBD (single line TBD or empty)."""
+    body = (text or "").strip()
+    if not body:
+        return True
+    if body.upper() == "TBD":
+        return True
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    return len(lines) == 1 and lines[0].upper().startswith("TBD")
+
+
+def display_number(num):
+    """Strip leading zeros for display; keep filenames/URLs as-is."""
+    if num and num.isdigit():
+        return str(int(num))
+    return num or "?"
+
+
+def load_key_value_file(path):
+    """Read key: value lines from path. Returns dict; empty if path missing."""
+    if not path.exists():
+        return {}
+    out = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        out[key.strip()] = value.strip()
+    return out
+
+
+def load_index_copy():
+    """Config index.txt as key: value dict."""
+    return load_key_value_file(CONFIG_DIR / "index.txt")
+
+
+def load_status_order(path=None):
+    """One status per line from path (default config/status.txt). Returns [] if missing."""
+    p = path if path is not None else CONFIG_DIR / "status.txt"
+    if not p.exists():
+        return []
+    return [line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def nugget_by_number_flex(nuggets, num_str):
+    """Look up nugget by number; tries num_str then num_str.zfill(3) if numeric."""
+    n = nugget_by_number(nuggets, num_str)
+    if n is None and num_str and num_str.isdigit():
+        n = nugget_by_number(nuggets, num_str.zfill(3))
+    return n
 
 
 def _noop_warn(msg):
@@ -147,9 +202,7 @@ def expand_nugget_directives(text, all_nuggets):
     """Replace @nugget(NNN) with italicized title link to that nugget. Unknown numbers left as-is."""
     def repl(m):
         num_str = m.group(1)
-        n = nugget_by_number(all_nuggets, num_str)
-        if n is None and num_str.isdigit():
-            n = nugget_by_number(all_nuggets, num_str.zfill(3))
+        n = nugget_by_number_flex(all_nuggets, num_str)
         if n is None:
             return m.group(0)
         title = n.get("title", "Untitled")
