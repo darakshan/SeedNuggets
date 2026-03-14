@@ -8,7 +8,7 @@ Beware, this website cached by github (or your AI?) and what you see may be out 
 
 Your conversation may lead to new, empty or preliminary nuggets.  So in the end you may generate several nuggets, or edits to existing pages.  Package them up as zip files when they are ready to be integrated into the website, since in the mean time more stuff can easily come up.
 
-All nugget sources: @link(nuggets/index.html, Source nuggets).
+All nugget sources: @link(4u-ai.txt, Source nuggets).
 
 Style guidlines for writing prose: @link(internal/style-guidelines.md, style)
 

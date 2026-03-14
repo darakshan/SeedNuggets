@@ -218,7 +218,7 @@ def expand_page_directives(text, context):
                 count = min(int(rest), 50)
             if nuggets and status_order:
                 full = page == "home"
-                base_href = "" if page == "list" else "d/"
+                base_href = "" if page == "list" or context.get("site_dir") else (context["site_dir"].rstrip("/") + "/")
                 block = _render_samples_html(
                     nuggets,
                     status_order,
@@ -235,7 +235,7 @@ def expand_page_directives(text, context):
             continue
         if stripped.startswith("@nuggets"):
             if nuggets and status_order:
-                base_href = "" if page == "list" else "d/"
+                base_href = "" if page == "list" or context.get("site_dir") else (context["site_dir"].rstrip("/") + "/")
                 block = _render_samples_html(
                     nuggets,
                     status_order,

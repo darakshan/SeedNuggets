@@ -180,13 +180,8 @@ def _head_links(css_href="site.css", icon_href="d/logo.svg"):
 """
 
 def nav(from_d=False, from_nuggets=False, layer_tabs_html=None):
-    """Top nav: logo left; menu items from config index (nav key). from_d=True for pages under d/; from_nuggets=True for d/nuggets/index.html. Site root = project root."""
-    if from_nuggets:
-        prefix, index_href, logo_src = "../", "../../index.html", "../logo.svg"
-    elif from_d:
-        prefix, index_href, logo_src = "", "../index.html", "logo.svg"
-    else:
-        prefix, index_href, logo_src = "d/", "index.html", "d/logo.svg"
+    """Top nav: logo left; menu items from config index (nav key). All output is under SITE_DIR, which is the web root (same-dir links)."""
+    prefix, index_href, logo_src = "", "index.html", "logo.svg"
     links = "".join(
         f'<li><a href="{prefix}{href}">{_html.escape(label)}</a></li>'
         for href, label, _, _ in _nav_items()
@@ -221,12 +216,7 @@ NAV_SCROLL_SCRIPT = """
 """
 
 def foot(logo_href="logo.svg"):
-    if logo_href.startswith("../"):
-        home_href = "../../index.html"
-    elif logo_href.startswith("d/"):
-        home_href = "index.html"
-    else:
-        home_href = "../index.html"
+    home_href = "index.html"
     logo_block = f'''
 <div class="page-end">
   <a href="{home_href}" class="page-end-logo" aria-label="Seed Nuggets home">
@@ -238,9 +228,9 @@ def foot(logo_href="logo.svg"):
 
 def head(title, extra="", at_root=False, css_href=None, icon_href=None):
     if css_href is None:
-        css_href = "d/site.css" if at_root else "site.css"
+        css_href = "site.css"
     if icon_href is None:
-        icon_href = "favicon.svg" if at_root else "logo.svg"
+        icon_href = "logo.svg"
     links = _head_links(css_href=css_href, icon_href=icon_href)
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -756,18 +746,19 @@ def build_tags_page(nuggets, status_order, explainer_terms=None):
 
 
 def _md_context(**overrides):
-    """Default context for process_md_to_html: warn, build_time, content_dir. Merge with overrides."""
-    return {"warn": _warn, "build_time": BUILD_TIME, "content_dir": CONTENT_DIR, **overrides}
+    """Default context for process_md_to_html: warn, build_time, content_dir, site_dir. Merge with overrides."""
+    copy = overrides.get("copy", load_index_copy())
+    return {"warn": _warn, "build_time": BUILD_TIME, "content_dir": CONTENT_DIR, "site_dir": (copy.get("site_dir") or "").strip(), **overrides}
 
 
 def build_index(nuggets, index_copy, status_order, collected_md_refs=None):
     context = _md_context(nuggets=nuggets, status_order=status_order, copy=index_copy, page="home")
     body_html = process_md_to_html(CONTENT_DIR / "home.md", context, collected_md_refs=collected_md_refs)
 
-    html = head("Seed Nuggets", at_root=True)
+    html = head("Seed Nuggets")
     html += nav()
     html += f'<div class="wrap"><div class="page-body home-page fade">{body_html}</div></div>'
-    html += foot("d/logo.svg")
+    html += foot()
     html += close()
     return html
 
@@ -934,40 +925,25 @@ def build_map_body(nuggets):
     return f'<h1>Map</h1>\n<p>Rows = from seed, columns = to seed. Marked cell means the row seed links to the column seed in its Related list.</p>\n{table}'
 
 
-def build_nuggets_index(index_copy=None):
-    """Write nuggets/index.html with links to source .txt under content/nuggets/ (site root = project root)."""
-    copy = index_copy or load_index_copy()
-    base = (copy.get("site_base") or "https://darakshan.github.io/SeedNuggets").strip().rstrip("/")
-    site_url = f"{base}/"
-    txt_files = sorted(NUGGETS_DIR.glob("*.txt"))
-    nuggets_out = SITE_DIR / "nuggets"
-    nuggets_out.mkdir(parents=True, exist_ok=True)
-    content_nuggets_href = "../../content/nuggets/"
-    html = head("Source nuggets", css_href="../site.css", icon_href="../logo.svg")
-    html += nav(from_nuggets=True)
-    html += """
-<div class="wrap">
-  <div class="page-body fade">
-    <h1>Source nuggets</h1>
-    <p class="dim">Raw nugget files. See the <a href=\"""" + _html.escape(site_url) + """\">""" + _html.escape(site_url) + """</a> for the built pages.</p>
-    <ul>
-"""
-    for p in txt_files:
-        name = p.name
-        html += f'  <li><a href="{_html.escape(content_nuggets_href + name)}">{_html.escape(name)}</a></li>\n'
-    html += """    </ul>
-  </div>
-</div>
-"""
-    html += foot("../logo.svg")
-    html += close()
-    (nuggets_out / "index.html").write_text(html, encoding="utf-8")
+def build_4u_ai_txt():
+    """Write d/4u-ai.txt: concatenation of raw content/internal/*.md and content/nuggets/*.txt."""
+    parts = []
+    for p in sorted(INTERNAL_DIR.glob("*.md")):
+        parts.append(f"=== content/internal/{p.name} ===\n\n{p.read_text(encoding='utf-8')}")
+    for p in sorted(NUGGETS_DIR.glob("*.txt")):
+        parts.append(f"=== content/nuggets/{p.name} ===\n\n{p.read_text(encoding='utf-8')}")
+    (SITE_DIR / "4u-ai.txt").write_text("\n\n".join(parts), encoding="utf-8")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    global BUILD_TIME
+    global BUILD_TIME, SITE_DIR
+    index_copy = load_index_copy()
+    site_dir = (index_copy.get("site_dir") or "").strip()
+    if not site_dir:
+        raise SystemExit("config/index.txt must set site_dir")
+    SITE_DIR = _ROOT / site_dir
     filter_num = None
     if "--nugget" in sys.argv:
         idx = sys.argv.index("--nugget")
@@ -1011,7 +987,6 @@ def main():
         if not md_path.exists():
             raise SystemExit(f"Required file missing: {md_path}")
     status_order = _require_status_order()
-    index_copy = load_index_copy()
 
     for n in nuggets:
         s = n.get("status", "empty")
@@ -1081,24 +1056,29 @@ def main():
         (SITE_DIR / "glossary.html").write_text(build_glossary_page(nuggets, explainer_terms), encoding="utf-8")
         print("  Built glossary.html")
 
-        (_ROOT / "index.html").write_text(build_index(nuggets, index_copy, status_order, collected_md_refs), encoding="utf-8")
-        print("  Built index.html")
+        for stale in ["index.html", "favicon.svg"]:
+            p = _ROOT / stale
+            if p.exists():
+                p.unlink()
+        index_html = build_index(nuggets, index_copy, status_order, collected_md_refs)
+        (SITE_DIR / "index.html").write_text(index_html, encoding="utf-8")
         if (CONFIG_DIR / "logo.svg").exists():
-            shutil.copy(CONFIG_DIR / "logo.svg", _ROOT / "favicon.svg")
-            print("  Built favicon.svg (root)")
+            shutil.copy(CONFIG_DIR / "logo.svg", SITE_DIR / "favicon.svg")
+            print("  Built favicon.svg")
+        print("  Built index.html")
 
         (SITE_DIR / "map.html").write_text(build_static_page("Map", build_map_body(nuggets)), encoding="utf-8")
         print("  Built map.html")
 
-        build_nuggets_index(index_copy)
-        print("  Built nuggets/index.html")
+        build_4u_ai_txt()
+        print("  Built 4u-ai.txt")
 
         BUILD_STATE_FILE.write_text(
             current_hash + "\n" + BUILD_TIME.isoformat(),
             encoding="utf-8",
         )
 
-    print(f"\nDone. Site written to repo root (index.html) and {SITE_DIR.relative_to(_ROOT)}/")
+    print(f"\nDone. Site written to {SITE_DIR.relative_to(_ROOT)}/ (web root)")
     if nothing_changed:
         print("Nothing changed; timestamp unchanged.")
     if _warn_count:
