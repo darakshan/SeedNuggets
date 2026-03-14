@@ -604,6 +604,28 @@ def _explainer_sort_key(term):
     return t
 
 
+def _explainer_block_html(entry):
+    """HTML for one term's explainer content: notes + link lines. Used in glossary."""
+    real_notes = [n for n in entry.get("notes", []) if n != "(No explainers found yet.)"]
+    if not entry["links"]:
+        real_notes = ["(No explainers found yet.)"]
+    notes_html = "".join(
+        '<p class="dim explainer-notes">' + _html.escape(n) + "</p>" for n in real_notes
+    )
+    link_lines = []
+    for link in entry["links"]:
+        url_esc = _html.escape(link["url"])
+        dur_display = link["duration"] or "?:??"
+        title_esc = _html.escape(_title_case(link["title"]))
+        link_lines.append(
+            f'<div class="explainer-link-line">'
+            f'<span class="explainer-dur">{dur_display}</span> '
+            f'<a class="explainer-link" href="{url_esc}" target="_blank" rel="noopener">{title_esc}</a>'
+            f'</div>'
+        )
+    return notes_html + "".join(link_lines)
+
+
 def build_explainers_page(nuggets, explainer_terms):
     """Build explainers.html from explainers data. Terms sorted alphabetically (strip 'The ' for sort); uses glossary styles."""
     if not explainer_terms:
@@ -696,7 +718,7 @@ def build_tags_page(nuggets, status_order, explainer_terms=None):
         for entry in sorted_explainer:
             term_esc = _html.escape(entry["term"])
             slug = entry["slug"]
-            term_parts.append(f'<div class="index-entry"><a href="explainers.html#{_html.escape(slug)}">{term_esc}</a> 📺</div>')
+            term_parts.append(f'<div class="index-entry"><a href="glossary.html#{_html.escape(slug)}">{term_esc}</a> 📺</div>')
         terms_block = "\n    ".join(term_parts)
 
     terms_section = ""
@@ -828,8 +850,8 @@ def build_bibliography_page(nuggets):
 
 
 def build_glossary_page(nuggets, explainer_terms=None):
-    """Build Glossary from #term (Term — Definition) in #provenance of all nuggets. Grouped by term; term in bold, definitions indented."""
-    explainer_slugs = {e["slug"] for e in (explainer_terms or [])}
+    """Build Glossary from #term (Term — Definition) in #provenance of all nuggets. Grouped by term; term in bold, definitions indented. Explainers merged below each term's definition."""
+    explainer_by_slug = {e["slug"]: e for e in (explainer_terms or [])}
     by_entry = {}
     for n in nuggets:
         num = n.get("number", "")
@@ -850,24 +872,30 @@ def build_glossary_page(nuggets, explainer_terms=None):
     for term in sorted(by_term.keys(), key=lambda t: t.lower()):
         term_esc = _html.escape(term)
         slug = term_slug(term)
-        explainer_link = f' <a href="explainers.html#{_html.escape(slug)}" class="gloss-explainer" aria-label="Explainers">📺</a>' if slug in explainer_slugs else ""
+        all_nuggets = []
+        seen = set()
+        for definition, nugget_list in by_term[term]:
+            for disp, fname in nugget_list:
+                if (disp, fname) not in seen:
+                    seen.add((disp, fname))
+                    all_nuggets.append((disp, fname))
+        all_nuggets.sort(key=lambda x: (int(x[0]) if x[0].isdigit() else 999, x[0]))
+        nugget_links = ", ".join(f'<a href="{fname}">{disp}</a>' for disp, fname in all_nuggets)
+        in_part = f' ({nugget_links})' if nugget_links else ""
+        term_line = f'<div class="gloss-term-line"><strong class="gloss-term">{term_esc}</strong>{in_part}</div>'
         def_blocks = []
-        for i, (definition, nugget_list) in enumerate(by_term[term]):
-            nugget_links = " ".join(f'<a href="{fname}">{disp}</a>' for disp, fname in nugget_list)
+        for definition, nugget_list in by_term[term]:
             def_esc = _html.escape(definition)
-            first_line = (i == 0) and explainer_link
             if definition:
-                def_blocks.append(
-                    f'<div class="gloss-def-block"><span class="gloss-def">{def_esc}</span> '
-                    f'<span class="gloss-in">In:</span> {nugget_links}{explainer_link if first_line else ""}</div>'
-                )
-            else:
-                def_blocks.append(
-                    f'<div class="gloss-def-block"><span class="gloss-in">In:</span> {nugget_links}{explainer_link if first_line else ""}</div>'
-                )
+                def_blocks.append(f'<div class="gloss-def-block"><span class="gloss-def">{def_esc}</span></div>')
+        if slug in explainer_by_slug:
+            def_blocks.append(
+                '<div class="gloss-def-block">' + _explainer_block_html(explainer_by_slug[slug]) + '</div>'
+            )
+        entry_id = f' id="{_html.escape(slug)}"' if slug in explainer_by_slug else ""
         parts.append(
-            f'<div class="gloss-entry">'
-            f'<div class="gloss-term-line"><strong class="gloss-term">{term_esc}</strong></div>'
+            f'<div class="gloss-entry"{entry_id}>'
+            f'{term_line}'
             f'<div class="gloss-defs">' + "\n".join(def_blocks) + '</div>'
             f'</div>'
         )
@@ -1004,8 +1032,6 @@ def main():
             for t in added:
                 print("  Added explainer term:", t)
         explainer_terms = load_explainers_csv(EXPLAINERS_CSV)
-        (SITE_DIR / "explainers.html").write_text(build_explainers_page(nuggets, explainer_terms), encoding="utf-8")
-        print("  Built explainers.html")
 
         (SITE_DIR / "tags.html").write_text(build_tags_page(nuggets, status_order, explainer_terms), encoding="utf-8")
         print("  Built tags.html")
