@@ -1,3 +1,5 @@
+nav: about, list, resources
+
 section_head: All seeds
 repo_link: Full repository →
 view_all: View all {n} seeds →

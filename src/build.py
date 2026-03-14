@@ -33,7 +33,7 @@ SITE_DIR = _ROOT / "d"
 
 MD_PAGE_PATHS = [
     CONTENT_DIR / "home.md",
-    CONTENT_DIR / "resources.md",
+    _ROOT / "resources.md",
     ABOUT_DIR / "page.md",
     INTERNAL_DIR / "page.md",
 ]
@@ -79,10 +79,12 @@ def get_build_input_files():
     files = set()
     for p in NUGGETS_DIR.glob("*.txt"):
         files.add(p)
-    for name in ["index.txt", "home.md", "status.txt", "resources.md", "site.css", "logo.svg"]:
+    for name in ["index.txt", "home.md", "status.txt", "site.css", "logo.svg"]:
         p = CONTENT_DIR / name
         if p.exists():
             files.add(p)
+    if (_ROOT / "resources.md").exists():
+        files.add(_ROOT / "resources.md")
     if EXPLAINERS_CSV.exists():
         files.add(EXPLAINERS_CSV)
     for main in MD_PAGE_PATHS:
@@ -117,6 +119,51 @@ def load_index_copy():
     return out
 
 
+_NAV_ITEMS = None
+
+
+def _first_h1(path):
+    """First # heading line text from a .md file, or None."""
+    if not path.exists():
+        return None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^#\s+(.+)$", line.strip())
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def get_nav_items(index_copy=None):
+    """Resolve nav key from index.txt to list of (href, label, kind, path).
+    kind is 'list', 'file', or 'dir'. path is None for 'list', else Path.
+    Default nav if key missing: about, list, resources."""
+    raw = (index_copy or load_index_copy()).get("nav", "about, list, resources")
+    tokens = [t.strip() for t in raw.split(",") if t.strip()]
+    out = []
+    for token in tokens:
+        if token == "list":
+            out.append(("list.html", "List", "list", None))
+            continue
+        md_file = _ROOT / f"{token}.md"
+        if md_file.exists():
+            label = _first_h1(md_file) or md_file.stem.replace("-", " ").title()
+            out.append((f"{token}.html", label, "file", md_file))
+            continue
+        dir_path = _ROOT / token
+        if dir_path.is_dir() and (dir_path / "page.md").exists():
+            out.append((f"{token}.html", token.replace("-", " ").title(), "dir", dir_path))
+            continue
+        _warn(f"nav item {token!r} not found: no {token}.md nor {token}/page.md in repo root")
+    return out
+
+
+def _nav_items():
+    global _NAV_ITEMS
+    if _NAV_ITEMS is None:
+        _NAV_ITEMS = get_nav_items(load_index_copy())
+    return _NAV_ITEMS
+
+
 def load_status_order():
     """Load content/status.txt: one status per line, in sort order (most ready first). Required."""
     p = CONTENT_DIR / "status.txt"
@@ -137,16 +184,18 @@ def _head_links(css_href="site.css", icon_href="d/logo.svg"):
 """
 
 def nav(from_d=False, layer_tabs_html=None):
-    """About, List, Resources. from_d=True for pages under d/. layer_tabs_html optional for nugget pages."""
+    """Top nav: logo left; menu items from index.txt (nav key). from_d=True for pages under d/. layer_tabs_html optional for nugget pages."""
     prefix = "" if from_d else "d/"
     index_href = "../index.html" if from_d else "index.html"
     logo_src = "logo.svg" if from_d else "d/logo.svg"
+    links = "".join(
+        f'<li><a href="{prefix}{href}">{_html.escape(label)}</a></li>'
+        for href, label, _, _ in _nav_items()
+    )
     row = f"""  <div class="nav-row">
   <a href="{index_href}" class="nav-logo"><img src="{logo_src}" alt="" class="nav-logo-icon">Seed Nuggets</a>
   <ul class="nav-links">
-    <li><a href="{prefix}about.html">About</a></li>
-    <li><a href="{prefix}list.html">List</a></li>
-    <li><a href="{prefix}resources.html">Resources</a></li>
+    {links}
   </ul>
 </div>"""
     extra = f"\n{layer_tabs_html}" if layer_tabs_html else ""
@@ -776,10 +825,11 @@ def build_static_page(title, body_html):
     return html
 
 
-def build_resources_page(nuggets=None, collected_md_refs=None):
+def build_md_file_page(md_path, nuggets=None, collected_md_refs=None):
     context = _md_context(nuggets=nuggets or [])
-    body_html = process_md_to_html(CONTENT_DIR / "resources.md", context, collected_md_refs=collected_md_refs)
-    html = head("Resources")
+    body_html = process_md_to_html(md_path, context, collected_md_refs=collected_md_refs)
+    title = _first_h1(md_path) or md_path.stem.replace("-", " ").title()
+    html = head(title)
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
     html += foot()
@@ -787,10 +837,12 @@ def build_resources_page(nuggets=None, collected_md_refs=None):
     return html
 
 
-def build_about_page(nuggets=None, collected_md_refs=None):
+def build_md_dir_page(dir_path, nuggets=None, collected_md_refs=None):
+    page_md = dir_path / "page.md"
     context = _md_context(nuggets=nuggets or [])
-    body_html = process_md_to_html(ABOUT_DIR / "page.md", context, collected_md_refs=collected_md_refs)
-    html = head("About")
+    body_html = process_md_to_html(page_md, context, collected_md_refs=collected_md_refs)
+    title = _first_h1(page_md) or dir_path.name.replace("-", " ").title()
+    html = head(title)
     html += nav(from_d=True)
     html += f'<div class="wrap"><div class="page-body fade">{body_html}</div></div>'
     html += foot()
@@ -1008,9 +1060,6 @@ def main():
             shutil.copy(CONTENT_DIR / "logo.svg", SITE_DIR / "logo.svg")
             print("  Built logo.svg")
 
-        (SITE_DIR / "list.html").write_text(build_list(nuggets, status_order), encoding="utf-8")
-        print("  Built list.html")
-
         if EXPLAINERS_CSV.exists():
             added = ensure_explainers_has_glossary_terms(EXPLAINERS_CSV, get_glossary_terms(nuggets))
             for t in added:
@@ -1023,11 +1072,17 @@ def main():
         print("  Built tags.html")
 
         collected_md_refs = set()
-        (SITE_DIR / "resources.html").write_text(build_resources_page(nuggets, collected_md_refs), encoding="utf-8")
-        print("  Built resources.html")
-
-        (SITE_DIR / "about.html").write_text(build_about_page(nuggets, collected_md_refs), encoding="utf-8")
-        print("  Built about.html")
+        nav_items = get_nav_items(index_copy)
+        for href, label, kind, path in nav_items:
+            if kind == "list":
+                (SITE_DIR / "list.html").write_text(build_list(nuggets, status_order), encoding="utf-8")
+                print("  Built list.html")
+            elif kind == "file":
+                (SITE_DIR / href).write_text(build_md_file_page(path, nuggets, collected_md_refs), encoding="utf-8")
+                print(f"  Built {href}")
+            elif kind == "dir":
+                (SITE_DIR / href).write_text(build_md_dir_page(path, nuggets, collected_md_refs), encoding="utf-8")
+                print(f"  Built {href}")
 
         (SITE_DIR / "internal.html").write_text(build_internal_page(nuggets, collected_md_refs), encoding="utf-8")
         print("  Built internal.html")
